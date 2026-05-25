@@ -1,0 +1,17 @@
+{
+  "name": "dlib",
+  "version": "1.0.0",
+  "description": "Database CLI - MongoDB data management tool",
+  "main": "src/main.js",
+  "bin": {
+    "dlib": "bin/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node bin/index.js"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "mongodb": "^6.8.0"
+  }
+}
