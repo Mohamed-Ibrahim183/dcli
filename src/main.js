@@ -1,9 +1,11 @@
 import { Command } from 'commander';
-import { cloneCommand } from './commands/clone.js';
-import { restoreCommand } from './commands/restore.js';
-import { refreshCommand } from './commands/refresh.js';
+import { exportCommand } from './commands/exportCmd.js';
+import { importCommand } from './commands/importCmd.js';
+import { pingCommand } from './commands/pingCmd.js';
+import { infoCommand } from './commands/info.js';
 import { addCommand } from './commands/add.js';
 import { removeCommand } from './commands/remove.js';
+import { generateHelp, colorizeDefaultHelp } from './utils/help.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -17,40 +19,61 @@ const packageJson = JSON.parse(
 const program = new Command();
 
 program
-  .name('dlib')
-  .description('Database CLI - MongoDB data management tool')
+  .name('dcli')
+  .description('Database CLI — MongoDB data management tool')
   .version(packageJson.version);
 
 program
-  .command('clone')
-  .description('Clone MongoDB data to a JSON file')
+  .command('export')
+  .description('Export a MongoDB database to JSON file(s)')
   .argument('<uri>', 'MongoDB connection URI')
-  .option('-o, --output <file>', 'Output file name')
-  .action(cloneCommand);
+  .option('-o, --output <name>', 'Output name (default: data-<timestamp>-<db>)')
+  .option('--format <type>', 'Output format: file, split, all (default: file)', 'file')
+  .option('--compact', 'Minify JSON output (default is prettified)')
+  .option('--include <collections...>', 'Only export these collections')
+  .option('--exclude <collections...>', 'Skip these collections')
+  .option('--dry-run', 'Preview export without writing files')
+  .action(exportCommand);
 
 program
-  .command('restore')
-  .description('Restore data from a JSON file to MongoDB (with backup)')
+  .command('import')
+  .description('Import a database or collection(s) from JSON file(s)')
   .argument('<uri>', 'MongoDB connection URI')
-  .requiredOption('-f, --file <file>', 'Input JSON file to restore from')
-  .action(restoreCommand);
+  .requiredOption('-f, --file <path>', 'File (.json), collection file, or directory of .json files')
+  .action(importCommand);
 
 program
-  .command('refresh')
-  .description('Auto-ping databases to prevent idle/inactivity pause')
-  .option('--file <path>', 'Path to a JSON file with databases list')
-  .action(refreshCommand);
+  .command('ping')
+  .description('Ping databases to prevent idle/inactivity pause')
+  .argument('[uri]', 'URI or friendly name from config (optional, uses config if omitted)')
+  .option('--file <path>', 'Path to a JSON file with database URIs (default: ~/.dcli/refresh.json)')
+  .action(pingCommand);
+
+program
+  .command('info')
+  .description('Show database collections and document counts')
+  .argument('<uri>', 'MongoDB connection URI')
+  .action(infoCommand);
 
 program
   .command('add')
-  .description('Add a database URI to the auto-refresh list')
+  .description('Add a database URI to the auto-ping list')
   .argument('<uri>', 'MongoDB connection URI')
+  .option('-n, --name <name>', 'Friendly name for this database')
   .action(addCommand);
 
 program
   .command('remove')
-  .description('Remove a database URI from the auto-refresh list')
-  .argument('<uri>', 'MongoDB connection URI')
+  .description('Remove a database by URI or friendly name from the ping list')
+  .argument('<uri>', 'URI or friendly name of the database')
   .action(removeCommand);
+
+program.helpInformation = generateHelp;
+
+const origHelpInfo = Command.prototype.helpInformation;
+for (const cmd of program.commands) {
+  const orig = origHelpInfo.bind(cmd);
+  cmd.helpInformation = () => colorizeDefaultHelp(orig());
+}
 
 program.parse();

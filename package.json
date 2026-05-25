@@ -1,10 +1,10 @@
 {
-  "name": "dlib",
+  "name": "dcli",
   "version": "1.0.0",
   "description": "Database CLI - MongoDB data management tool",
   "main": "src/main.js",
   "bin": {
-    "dlib": "bin/index.js"
+    "dcli": "bin/index.js"
   },
   "type": "module",
   "scripts": {

@@ -10,9 +10,9 @@ export function extractDbName(uri) {
   try {
     const url = new URL(uri);
     const db = url.pathname.replace(/^\//, '');
-    return db || 'unknown';
+    return db || 'test';
   } catch {
-    return 'unknown';
+    return 'test';
   }
 }
 

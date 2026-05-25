@@ -1,13 +1,13 @@
 import { removeDatabase } from '../utils/config.js';
 import { success, warn, error } from '../utils/logger.js';
 
-export async function removeCommand(uri) {
+export async function removeCommand(target) {
   try {
-    const removed = await removeDatabase(uri);
+    const removed = await removeDatabase(target);
     if (removed) {
-      success(`Database removed from refresh list.`);
+      success(`Database removed from ping list.`);
     } else {
-      warn(`Database not found in the refresh list.`);
+      warn(`No database found matching "${target}" in the ping list.`);
     }
   } catch (err) {
     error(`Failed to remove database: ${err.message}`);
