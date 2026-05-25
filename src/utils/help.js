@@ -88,6 +88,18 @@ const COMMANDS = [
     ],
   },
   {
+    name: 'auto-ping',
+    args: '',
+    desc: 'Schedule "dcli ping" to run on logon (may need admin)',
+    options: [
+      ['--remove', 'Remove the scheduled task'],
+    ],
+    examples: [
+      '$ dcli auto-ping',
+      '$ dcli auto-ping --remove',
+    ],
+  },
+  {
     name: 'help',
     args: '[command]',
     desc: 'Display help for a specific command',

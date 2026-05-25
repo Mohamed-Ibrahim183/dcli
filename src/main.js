@@ -5,6 +5,7 @@ import { pingCommand } from './commands/pingCmd.js';
 import { infoCommand } from './commands/info.js';
 import { addCommand } from './commands/add.js';
 import { removeCommand } from './commands/remove.js';
+import { autoPingCommand } from './commands/autoPing.js';
 import { generateHelp, colorizeDefaultHelp } from './utils/help.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +68,12 @@ program
   .description('Remove a database by URI or friendly name from the ping list')
   .argument('<uri>', 'URI or friendly name of the database')
   .action(removeCommand);
+
+program
+  .command('auto-ping')
+  .description('Schedule "dcli ping" to run automatically on startup')
+  .option('--remove', 'Remove the scheduled task')
+  .action(autoPingCommand);
 
 program.helpInformation = generateHelp;
 
