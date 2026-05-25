@@ -8,8 +8,9 @@
 - **import** — Import a database or specific collection(s) from JSON file(s)
 - **ping** — Ping databases to prevent idle/inactivity pause
 - **info** — Show database collections and document counts
-- **add** — Register a database URI in the auto-ping list
-- **remove** — Remove a database URI from the auto-ping list
+- **add** — Register a database URI in the auto-ping list (with optional name)
+- **remove** — Remove a database by URI or friendly name
+- **auto-ping** — Schedule `dcli ping` to run automatically on Windows logon
 
 ## Installation
 
@@ -28,7 +29,7 @@ npm link
 
 ### export
 
-Export a MongoDB database to JSON file(s).
+Export a MongoDB database to JSON file(s). Output is prettified by default.
 
 ```bash
 dcli export "mongodb://localhost:27017/mydb"
@@ -36,16 +37,19 @@ dcli export "mongodb://localhost:27017/mydb"
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output <name>` | Output name |
+| `-o, --output <name>` | Output name (without or with `.json` extension) |
 | `--format <type>` | `file` (single JSON), `split` (per collection), `all` (both) |
-| `--pretty` | Prettify JSON output |
-| `--include <col...>` | Only export these collections |
-| `--exclude <col...>` | Skip these collections |
+| `--compact` | Minify JSON output (default is prettified) |
+| `--include <collections...>` | Only export these collections |
+| `--exclude <collections...>` | Skip these collections |
 | `--dry-run` | Preview without writing files |
+
+If the output file already exists, it auto-increments — `file.json` → `file (1).json` → `file (2).json`.
 
 ```bash
 dcli export "mongodb://..." -o mydata
-dcli export "mongodb://..." --format split --pretty
+dcli export "mongodb://..." --format split
+dcli export "mongodb://..." --format all --compact
 dcli export "mongodb://..." --include users posts
 dcli export "mongodb://..." --exclude logs analytics
 dcli export "mongodb://..." --dry-run
@@ -55,23 +59,27 @@ dcli export "mongodb://..." --dry-run
 
 Restore from a full file, single collection file, or directory.
 
+| `-f` path | Behavior |
+|-----------|----------|
+| Full `.json` file | Restore entire DB (backup + confirmation + drop) |
+| Single collection `.json` | Restore that collection only |
+| Directory of `.json` files | Restore each file as a collection |
+
 ```bash
 dcli import "mongodb://localhost:27017/mydb" -f backup.json
 dcli import "mongodb://..." -f ./users.json
 dcli import "mongodb://..." -f ./collections/
 ```
 
-Full file restores the entire DB (backup + confirmation + drop).
-Single collection files restore only that collection.
-
 ### ping
 
 Ping databases to prevent inactivity pause.
 
 ```bash
-dcli ping
-dcli ping "mongodb://localhost:27017/mydb"
-dcli ping --file my-dbs.json
+dcli ping                          # ping all from config
+dcli ping "mongodb://..."          # ping a raw URI
+dcli ping dbName                   # ping by friendly name from config
+dcli ping --file my-dbs.json       # ping all from a custom file
 ```
 
 ### info
@@ -84,11 +92,23 @@ dcli info "mongodb://localhost:27017/mydb"
 
 ### add / remove
 
-Manage the auto-ping list (`~/.dcli/refresh.json`):
+Manage the auto-ping list (`~/.dcli/refresh.json`).
 
 ```bash
-dcli add "mongodb://user:pass@cluster.mongodb.net/mydb"
-dcli remove "mongodb://user:pass@cluster.mongodb.net/mydb"
+dcli add "mongodb://..." -n dbName          # add with friendly name
+dcli add "mongodb://..." -n dbName          # updates name if URI already exists
+dcli remove "mongodb://user:pass@..."       # remove by URI
+dcli remove dbName                          # remove by friendly name
+```
+
+### auto-ping
+
+Schedule `dcli ping` to run automatically 5 minutes after Windows logon.
+Requires administrator privileges to create the task.
+
+```bash
+dcli auto-ping           # create the task (run terminal as Admin)
+dcli auto-ping --remove  # remove the task (run terminal as Admin)
 ```
 
 ## Config File
@@ -98,10 +118,13 @@ dcli remove "mongodb://user:pass@cluster.mongodb.net/mydb"
 ```json
 {
   "databases": [
-    "mongodb://cluster0.example.mongodb.net/mydb"
+    { "uri": "mongodb://cluster0.example.mongodb.net/mydb", "name": "dbName" },
+    "mongodb://backup.example.mongodb.net/otherdb"
   ]
 }
 ```
+
+Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible).
 
 ## Export Format
 
