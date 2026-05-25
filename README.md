@@ -15,7 +15,7 @@
 ## Installation
 
 ```bash
-npm install -g dcli
+npm install -g @mohamed1_1ibrahim/dcli
 ```
 
 ```bash
