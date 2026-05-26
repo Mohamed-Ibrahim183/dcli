@@ -100,6 +100,52 @@ const COMMANDS = [
     ],
   },
   {
+    name: 'clone-add',
+    args: '<uri>',
+    desc: 'Add a database URI to the auto-clone list',
+    options: [
+      ['-n, --name <name>', 'Friendly name for this database'],
+    ],
+    examples: [
+      '$ dcli clone-add "mongodb://user:pass@cluster.mongodb.net/mydb"',
+      '$ dcli clone-add "mongodb://..." -n dbName',
+    ],
+  },
+  {
+    name: 'clone-remove',
+    args: '<uri|name>',
+    desc: 'Remove a database by URI or friendly name from the clone list',
+    options: [],
+    examples: [
+      '$ dcli clone-remove "mongodb://user:pass@cluster.mongodb.net/mydb"',
+      '$ dcli clone-remove dbName',
+    ],
+  },
+  {
+    name: 'auto-clone',
+    args: '',
+    desc: 'Clone all databases in the clone list to JSON files',
+    options: [
+      ['-o, --output <dir>', 'Output directory (default: current directory)'],
+    ],
+    examples: [
+      '$ dcli auto-clone',
+      '$ dcli auto-clone -o ./backups',
+    ],
+  },
+  {
+    name: 'gui',
+    args: '',
+    desc: 'Open the dcli graphical interface in your browser',
+    options: [
+      ['-p, --port <number>', 'Port to run the GUI on (default: 3456)'],
+    ],
+    examples: [
+      '$ dcli gui',
+      '$ dcli gui -p 8080',
+    ],
+  },
+  {
     name: 'help',
     args: '[command]',
     desc: 'Display help for a specific command',
