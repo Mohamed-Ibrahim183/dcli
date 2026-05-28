@@ -155,6 +155,17 @@ input[type="checkbox"] { accent-color: #58a6ff; }
         <div class="card">
           <h3>Auto-Ping</h3>
           <div id="auto-ping-status"></div>
+          <div class="form-row" style="margin-top:8px">
+            <select id="ap-schedule" style="flex:1">
+              <option value="ONLOGON">On Logon</option>
+              <option value="DAILY">Daily</option>
+              <option value="HOURLY">Hourly</option>
+              <option value="ONCE">Once</option>
+            </select>
+            <input type="text" id="ap-at" placeholder="Time (e.g. 09:00)" style="flex:1;display:none">
+            <input type="number" id="ap-every" placeholder="Hours (e.g. 2)" min="1" style="flex:1;display:none">
+            <input type="number" id="ap-delay" placeholder="Delay min (e.g. 10)" min="1" value="5" style="flex:1">
+          </div>
           <div class="status-group">
             <button class="btn btn-success" id="auto-ping-on">Schedule</button>
             <button class="btn btn-danger" id="auto-ping-off">Remove</button>
@@ -326,7 +337,21 @@ $('#info-btn').addEventListener('click', async () => {
   finally { $('#info-btn').disabled = false; $('#info-btn').textContent = 'Get Info'; }
 });
 
-// Auto-ping
+// Auto-ping schedule UI
+const apSchedule = $('#ap-schedule');
+const apAt = $('#ap-at');
+const apEvery = $('#ap-every');
+const apDelay = $('#ap-delay');
+
+function toggleApFields() {
+  const val = apSchedule.value;
+  apAt.style.display = (val === 'DAILY' || val === 'ONCE') ? 'block' : 'none';
+  apEvery.style.display = val === 'HOURLY' ? 'block' : 'none';
+  apDelay.style.display = val === 'ONLOGON' ? 'block' : 'none';
+}
+apSchedule.addEventListener('change', toggleApFields);
+toggleApFields();
+
 async function loadAutoPingStatus() {
   try {
     const res = await api('GET', '/api/auto-ping');
@@ -337,9 +362,13 @@ async function loadAutoPingStatus() {
 }
 
 $('#auto-ping-on').addEventListener('click', async () => {
+  const body = { schedule: apSchedule.value };
+  if (apAt.value.trim()) body.at = apAt.value.trim();
+  if (apEvery.value) body.every = apEvery.value;
+  if (apDelay.value) body.delay = apDelay.value;
   $('#auto-ping-on').disabled = true;
   try {
-    const res = await api('POST', '/api/auto-ping');
+    const res = await api('POST', '/api/auto-ping', body);
     log(res.message, 'success');
     loadAutoPingStatus();
   } catch (e) { log('Failed to schedule auto-ping: ' + e.message, 'error'); }

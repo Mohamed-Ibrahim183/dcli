@@ -4,6 +4,7 @@ import { join, parse } from 'node:path';
 import { createInterface } from 'node:readline';
 import { stdin as input, stdout as output } from 'node:process';
 import { connect, exportDatabase, dropDatabase, importDatabase, extractDbName } from '../utils/mongodb.js';
+import { resolveName } from '../utils/resolve.js';
 import { info, warn, success, error } from '../utils/logger.js';
 
 function askQuestion(query) {
@@ -39,6 +40,7 @@ async function loadDirectory(dirPath) {
 }
 
 export async function importCommand(uri, options) {
+  uri = await resolveName(uri);
   const filePath = options.file;
 
   try {

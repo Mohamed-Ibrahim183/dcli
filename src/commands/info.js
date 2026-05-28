@@ -1,7 +1,9 @@
 import { connect, extractDbName } from '../utils/mongodb.js';
+import { resolveName } from '../utils/resolve.js';
 import { info, error, highlight } from '../utils/logger.js';
 
 export async function infoCommand(uri) {
+  uri = await resolveName(uri);
   try {
     const client = await connect(uri);
     const db = client.db();

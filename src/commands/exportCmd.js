@@ -2,6 +2,7 @@ import { writeFile, mkdir, access } from 'node:fs/promises';
 import { join, extname, dirname, basename } from 'node:path';
 import { constants } from 'node:fs';
 import { connect, exportDatabase, extractDbName } from '../utils/mongodb.js';
+import { resolveName } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
 function ensureJsonExt(name) {
@@ -50,6 +51,7 @@ async function getUniquePath(filePath) {
 }
 
 export async function exportCommand(uri, options) {
+  uri = await resolveName(uri);
   const dbName = extractDbName(uri);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outputName = options.output || `data-${timestamp}-${dbName}`;

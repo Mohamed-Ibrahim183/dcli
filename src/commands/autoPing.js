@@ -15,20 +15,52 @@ export async function autoPingCommand(options) {
   }
 
   try {
-    const createCmd = [
-      `schtasks /create`,
-      `/tn "${taskName}"`,
-      `/sc ONLOGON`,
-      `/delay 0000:05`,
-      `/tr "cmd /c dcli ping"`,
-      `/f`,
-    ].join(' ');
+    const schedule = (options.schedule || 'ONLOGON').toUpperCase();
+    const at = options.at;
+    const every = options.every;
+    const delay = options.delay || '5';
+
+    let parts = [`schtasks /create`, `/tn "${taskName}"`, `/f`];
+
+    switch (schedule) {
+      case 'DAILY': {
+        const time = at || '09:00';
+        parts.push(`/sc DAILY`, `/st ${time}`);
+        break;
+      }
+      case 'HOURLY': {
+        const interval = every || '1';
+        parts.push(`/sc HOURLY`, `/mo ${interval}`);
+        break;
+      }
+      case 'ONCE': {
+        const time = at || '09:00';
+        parts.push(`/sc ONCE`, `/st ${time}`);
+        break;
+      }
+      default: {
+        const delayMinutes = Math.max(1, parseInt(delay, 10) || 5);
+        parts.push(`/sc ONLOGON`, `/delay ${String(delayMinutes).padStart(4, '0')}:00`);
+        break;
+      }
+    }
+
+    parts.push(`/tr "cmd /c dcli ping"`);
+    const createCmd = parts.join(' ');
 
     execSync(createCmd, { stdio: 'pipe' });
+
+    const messages = {
+      DAILY: `It will run "dcli ping" daily at ${at || '09:00'}.`,
+      HOURLY: `It will run "dcli ping" every ${every || '1'} hour(s).`,
+      ONCE: `It will run "dcli ping" once at ${at || '09:00'}.`,
+      ONLOGON: `It will run "dcli ping" ${delay ? `${delay} minute(s) after` : ''} you log on.`,
+    };
+
     success(`Task "${taskName}" created successfully.`);
-    info(`It will run "dcli ping" 5 minutes after you log on.`);
+    info(messages[schedule] || messages.ONLOGON);
   } catch (err) {
-    error(`Failed to create task: ${err.message.includes('Access is denied') ? 'Please run as Administrator (right-click terminal → Run as administrator).' : err.message}`);
+    error(`Failed to create task: ${err.message.includes('Access is denied') ? 'Please run as Administrator (right-click terminal \u2192 Run as administrator).' : err.message}`);
     process.exit(1);
   }
 }

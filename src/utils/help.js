@@ -11,7 +11,7 @@ const COMMANDS = [
   {
     name: 'export',
     args: '<uri>',
-    desc: 'Export a MongoDB database to JSON file(s)',
+    desc: 'Export a MongoDB database to JSON file(s) (supports friendly name)',
     options: [
       ['-o, --output <name>', 'Output name (default: data-<timestamp>-<db>)'],
       ['--format <type>', 'Output format: file, split, all (default: file)'],
@@ -33,7 +33,7 @@ const COMMANDS = [
   {
     name: 'import',
     args: '<uri>',
-    desc: 'Import a database or collection(s) from JSON file(s)',
+    desc: 'Import a database or collection(s) from JSON file(s) (supports friendly name)',
     options: [
       ['-f, --file <path>', 'File (.json), collection file, or directory of .json files (required)'],
     ],
@@ -59,7 +59,7 @@ const COMMANDS = [
   {
     name: 'info',
     args: '<uri>',
-    desc: 'Show database collections and document counts',
+    desc: 'Show database collections and document counts (supports friendly name)',
     options: [],
     examples: [
       '$ dcli info "mongodb://localhost:27017/mydb"',
@@ -90,12 +90,19 @@ const COMMANDS = [
   {
     name: 'auto-ping',
     args: '',
-    desc: 'Schedule "dcli ping" to run on logon (may need admin)',
+    desc: 'Schedule "dcli ping" to run automatically (may need admin)',
     options: [
       ['--remove', 'Remove the scheduled task'],
+      ['--schedule <type>', 'ONLOGON, DAILY, HOURLY, ONCE (default: ONLOGON)'],
+      ['--at <time>', 'Time for DAILY/ONCE (24h, e.g. 09:00)'],
+      ['--every <n>', 'Hourly interval in hours (default: 1)'],
+      ['--delay <n>', 'ONLOGON delay in minutes (default: 5)'],
     ],
     examples: [
       '$ dcli auto-ping',
+      '$ dcli auto-ping --schedule DAILY --at 10:00',
+      '$ dcli auto-ping --schedule HOURLY --every 2',
+      '$ dcli auto-ping --schedule ONLOGON --delay 10',
       '$ dcli auto-ping --remove',
     ],
   },
@@ -122,6 +129,18 @@ const COMMANDS = [
     ],
   },
   {
+    name: 'clone',
+    args: '<name>',
+    desc: 'Clone a single database by its friendly name from the clone list',
+    options: [
+      ['-o, --output <dir>', 'Output directory (default: current directory)'],
+    ],
+    examples: [
+      '$ dcli clone kinderride',
+      '$ dcli clone kinderride -o ./backups',
+    ],
+  },
+  {
     name: 'auto-clone',
     args: '',
     desc: 'Clone all databases in the clone list to JSON files',
@@ -131,6 +150,38 @@ const COMMANDS = [
     examples: [
       '$ dcli auto-clone',
       '$ dcli auto-clone -o ./backups',
+    ],
+  },
+  {
+    name: 'view',
+    args: '<uri> [collection]',
+    desc: 'Browse collections and documents in a styled table',
+    options: [
+      ['--limit <n>', 'Maximum documents to show (default: 10)'],
+      ['--fields <f1,f2>', 'Comma-separated fields to display'],
+      ['--sort <field>', 'Sort by field (ascending)'],
+      ['--all', 'Show all documents (no limit)'],
+      ['--json', 'Output raw JSON instead of a table'],
+    ],
+    examples: [
+      '$ dcli view myapp',
+      '$ dcli view myapp users',
+      '$ dcli view myapp users --limit 5',
+      '$ dcli view myapp users --fields name,email',
+      '$ dcli view myapp users --sort createdAt --all',
+      '$ dcli view myapp users --json',
+    ],
+  },
+  {
+    name: 'show',
+    args: '',
+    desc: 'Show the auto-ping or auto-clone database list',
+    options: [
+      ['--clone', 'Show the auto-clone list instead of the clone list'],
+    ],
+    examples: [
+      '$ dcli show',
+      '$ dcli show --clone',
     ],
   },
   {

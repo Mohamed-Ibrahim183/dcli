@@ -9,6 +9,9 @@ import { autoPingCommand } from './commands/autoPing.js';
 import { cloneAddCommand } from './commands/cloneAdd.js';
 import { cloneRemoveCommand } from './commands/cloneRemove.js';
 import { autoCloneCommand } from './commands/autoClone.js';
+import { cloneCommand } from './commands/clone.js';
+import { viewCommand } from './commands/view.js';
+import { showCommand } from './commands/show.js';
 import { guiCommand } from './commands/gui.js';
 import { generateHelp, colorizeDefaultHelp } from './utils/help.js';
 import { readFileSync } from 'node:fs';
@@ -31,7 +34,7 @@ program
 program
   .command('export')
   .description('Export a MongoDB database to JSON file(s)')
-  .argument('<uri>', 'MongoDB connection URI')
+  .argument('<uri>', 'MongoDB connection URI or friendly name from config')
   .option('-o, --output <name>', 'Output name (default: data-<timestamp>-<db>)')
   .option('--format <type>', 'Output format: file, split, all (default: file)', 'file')
   .option('--compact', 'Minify JSON output (default is prettified)')
@@ -43,7 +46,7 @@ program
 program
   .command('import')
   .description('Import a database or collection(s) from JSON file(s)')
-  .argument('<uri>', 'MongoDB connection URI')
+  .argument('<uri>', 'MongoDB connection URI or friendly name from config')
   .requiredOption('-f, --file <path>', 'File (.json), collection file, or directory of .json files')
   .action(importCommand);
 
@@ -57,7 +60,7 @@ program
 program
   .command('info')
   .description('Show database collections and document counts')
-  .argument('<uri>', 'MongoDB connection URI')
+  .argument('<uri>', 'MongoDB connection URI or friendly name from config')
   .action(infoCommand);
 
 program
@@ -75,8 +78,12 @@ program
 
 program
   .command('auto-ping')
-  .description('Schedule "dcli ping" to run automatically on startup')
+  .description('Schedule "dcli ping" to run automatically (customizable)')
   .option('--remove', 'Remove the scheduled task')
+  .option('--schedule <type>', 'Schedule type: ONLOGON, DAILY, HOURLY, ONCE (default: ONLOGON)')
+  .option('--at <time>', 'Time for DAILY/ONCE schedules (24h format, e.g. 09:00)')
+  .option('--every <n>', 'Interval in hours for HOURLY schedule (default: 1)')
+  .option('--delay <n>', 'Delay in minutes for ONLOGON schedule (default: 5)')
   .action(autoPingCommand);
 
 program
@@ -93,10 +100,35 @@ program
   .action(cloneRemoveCommand);
 
 program
+  .command('clone')
+  .description('Clone a database by its friendly name from the clone list')
+  .argument('<name>', 'Friendly name or URI of the database in the clone list')
+  .option('-o, --output <dir>', 'Output directory (default: current directory)')
+  .action(cloneCommand);
+
+program
   .command('auto-clone')
   .description('Clone all databases in the clone list to JSON files')
   .option('-o, --output <dir>', 'Output directory (default: current directory)')
   .action(autoCloneCommand);
+
+program
+  .command('view')
+  .description('Browse collections and documents in a styled table')
+  .argument('<uri>', 'MongoDB connection URI or friendly name from config')
+  .argument('[collection]', 'Collection to query (lists collections if omitted)')
+  .option('--limit <n>', 'Maximum documents to show (default: 10)', '10')
+  .option('--fields <fields>', 'Comma-separated list of fields to display')
+  .option('--sort <field>', 'Sort by field (ascending)')
+  .option('--all', 'Show all documents (no limit)')
+  .option('--json', 'Output raw JSON instead of a table')
+  .action(viewCommand);
+
+program
+  .command('show')
+  .description('Show the auto-ping or auto-clone database list')
+  .option('--clone', 'Show the auto-clone list instead of the ping list')
+  .action(showCommand);
 
 program
   .command('gui')

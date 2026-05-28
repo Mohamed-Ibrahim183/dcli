@@ -217,23 +217,63 @@ async function handleApi(req, res) {
     // Auto-ping
     if (method === 'GET' && path === '/api/auto-ping') {
       try {
-        execSync('schtasks /query /tn "DCLI-AutoPing"', { stdio: 'pipe' });
-        return sendJson(res, { scheduled: true });
+        const out = execSync(`schtasks /query /tn "DCLI-AutoPing" /v /fo csv`, { stdio: 'pipe', encoding: 'utf-8' });
+        const lines = out.split('\n').filter(Boolean);
+        const header = lines[0]?.split(',') || [];
+        const values = lines[1]?.split(',') || [];
+        const idx = (name) => header.findIndex(h => h.replace(/"/g, '').trim() === name);
+        const get = (name) => (values[idx(name)] || '').replace(/"/g, '').trim();
+        return sendJson(res, {
+          scheduled: true,
+          scheduleType: get('Schedule Type') || get('Task To Run'),
+          startTime: get('Start Time'),
+          repeatInterval: get('Repeat: Every'),
+        });
       } catch {
         return sendJson(res, { scheduled: false });
       }
     }
     if (method === 'POST' && path === '/api/auto-ping') {
-      const createCmd = [
-        'schtasks /create',
-        '/tn "DCLI-AutoPing"',
-        '/sc ONLOGON',
-        '/delay 0000:05',
-        '/tr "cmd /c dcli ping"',
-        '/f',
-      ].join(' ');
-      execSync(createCmd, { stdio: 'pipe' });
-      return sendJson(res, { success: true, message: 'Auto-ping task created. It will run "dcli ping" 5 minutes after logon.' });
+      const schedule = (body.schedule || 'ONLOGON').toUpperCase();
+      const at = body.at;
+      const every = body.every;
+      const delay = body.delay || '5';
+
+      let parts = ['schtasks /create', '/tn "DCLI-AutoPing"', '/f'];
+
+      switch (schedule) {
+        case 'DAILY': {
+          const time = at || '09:00';
+          parts.push(`/sc DAILY`, `/st ${time}`);
+          break;
+        }
+        case 'HOURLY': {
+          const interval = every || '1';
+          parts.push(`/sc HOURLY`, `/mo ${interval}`);
+          break;
+        }
+        case 'ONCE': {
+          const time = at || '09:00';
+          parts.push(`/sc ONCE`, `/st ${time}`);
+          break;
+        }
+        default: {
+          const delayMinutes = Math.max(1, parseInt(delay, 10) || 5);
+          parts.push(`/sc ONLOGON`, `/delay ${String(delayMinutes).padStart(4, '0')}:00`);
+          break;
+        }
+      }
+
+      parts.push(`/tr "cmd /c dcli ping"`);
+      execSync(parts.join(' '), { stdio: 'pipe' });
+
+      const messages = {
+        DAILY: `Auto-ping task created. It will run "dcli ping" daily at ${at || '09:00'}.`,
+        HOURLY: `Auto-ping task created. It will run "dcli ping" every ${every || '1'} hour(s).`,
+        ONCE: `Auto-ping task created. It will run "dcli ping" once at ${at || '09:00'}.`,
+        ONLOGON: `Auto-ping task created. It will run "dcli ping" ${delay ? `${delay} minute(s) after` : ''} you log on.`,
+      };
+      return sendJson(res, { success: true, message: messages[schedule] || messages.ONLOGON });
     }
     if (method === 'DELETE' && path === '/api/auto-ping') {
       execSync('schtasks /delete /tn "DCLI-AutoPing" /f', { stdio: 'pipe' });
