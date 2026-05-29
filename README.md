@@ -11,6 +11,13 @@
 - **add** — Register a database URI in the auto-ping list (with optional name)
 - **remove** — Remove a database by URI or friendly name
 - **auto-ping** — Schedule `dcli ping` to run automatically on Windows logon
+- **view** — Browse collections and documents in a styled table
+- **show** — Display the auto-ping or auto-clone database list
+- **clone-add** — Register a database URI in the auto-clone list
+- **clone-remove** — Remove a database from the auto-clone list
+- **clone** — Clone a single database by friendly name to JSON
+- **auto-clone** — Clone all databases in the clone list to JSON files
+- **gui** — Launch the web GUI in your browser
 
 ## Installation
 
@@ -103,17 +110,93 @@ dcli remove dbName                          # remove by friendly name
 
 ### auto-ping
 
-Schedule `dcli ping` to run automatically 5 minutes after Windows logon.
-Requires administrator privileges to create the task.
+Schedule `dcli ping` to run automatically. Requires administrator privileges.
 
 ```bash
-dcli auto-ping           # create the task (run terminal as Admin)
-dcli auto-ping --remove  # remove the task (run terminal as Admin)
+dcli auto-ping                       # ONLOGON, 5 min delay (default)
+dcli auto-ping --remove              # remove the task
+dcli auto-ping --schedule DAILY --at 09:00
+dcli auto-ping --schedule HOURLY --every 2
+dcli auto-ping --schedule ONCE --at 18:00
+dcli auto-ping --schedule ONLOGON --delay 10
 ```
 
-## Config File
+| Option | Description |
+|--------|-------------|
+| `--remove` | Remove the scheduled task |
+| `--schedule <type>` | `ONLOGON`, `DAILY`, `HOURLY`, or `ONCE` (default: `ONLOGON`) |
+| `--at <time>` | Time for `DAILY`/`ONCE` schedules (24h, e.g. `09:00`) |
+| `--every <n>` | Interval in hours for `HOURLY` (default: 1) |
+| `--delay <n>` | Delay in minutes for `ONLOGON` (default: 5) |
 
-`~/.dcli/refresh.json`:
+### view
+
+Browse collections and documents in a styled table.
+
+```bash
+dcli view "mongodb://localhost:27017/mydb"              # list collections
+dcli view "mongodb://localhost:27017/mydb" users         # browse documents
+dcli view "mongodb://..." users --limit 5
+dcli view "mongodb://..." users --fields name,email --sort name
+dcli view "mongodb://..." users --all --json
+```
+
+| Option | Description |
+|--------|-------------|
+| `--limit <n>` | Maximum documents (default: 10) |
+| `--fields <fields>` | Comma-separated fields to display |
+| `--sort <field>` | Sort ascending by field |
+| `--all` | Show all documents (no limit) |
+| `--json` | Output raw JSON instead of a table |
+
+### show
+
+Display the auto-ping or auto-clone database list.
+
+```bash
+dcli show              # show ping list (~/.dcli/refresh.json)
+dcli show --clone      # show clone list (~/.dcli/auto-clone.json)
+```
+
+### clone-add / clone-remove
+
+Manage the auto-clone list (`~/.dcli/auto-clone.json`).
+
+```bash
+dcli clone-add "mongodb://..." -n dbName
+dcli clone-remove dbName
+```
+
+### clone
+
+Clone a single database from the clone list to a JSON file.
+
+```bash
+dcli clone dbName
+dcli clone dbName -o ./backups
+```
+
+### auto-clone
+
+Clone all databases in the clone list to JSON files.
+
+```bash
+dcli auto-clone
+dcli auto-clone -o ./backups
+```
+
+### gui
+
+Launch the web GUI in your browser (port defaults to 3456).
+
+```bash
+dcli gui
+dcli gui -p 8080
+```
+
+## Config Files
+
+**Ping list** — `~/.dcli/refresh.json`:
 
 ```json
 {
@@ -124,7 +207,9 @@ dcli auto-ping --remove  # remove the task (run terminal as Admin)
 }
 ```
 
-Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible).
+**Clone list** — `~/.dcli/auto-clone.json` (same format as above).
+
+Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Many commands also accept a **friendly name** in place of a URI (e.g. `dcli ping dbName`).
 
 ## Export Format
 
