@@ -1,6 +1,16 @@
+import { setServers } from 'node:dns';
+import { resolveSrv } from 'node:dns/promises';
 import { MongoClient } from 'mongodb';
 
 export async function connect(uri) {
+  if (uri.startsWith('mongodb+srv://')) {
+    const hostname = new URL(uri).hostname;
+    try {
+      await resolveSrv(`_mongodb._tcp.${hostname}`);
+    } catch {
+      setServers(['8.8.8.8', '1.1.1.1']);
+    }
+  }
   const client = new MongoClient(uri);
   await client.connect();
   return client;

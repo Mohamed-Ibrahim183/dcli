@@ -8,7 +8,8 @@ async function pingUri(uri) {
     await pingDatabase(client);
     await client.close();
     return true;
-  } catch {
+  } catch (err) {
+    error(`Ping error: ${err.message}`);
     return false;
   }
 }
