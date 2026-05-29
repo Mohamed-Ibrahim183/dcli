@@ -1,6 +1,6 @@
 {
   "name": "@mohamed1_1ibrahim/dcli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Database CLI - MongoDB data management tool (export, import, ping, info)",
   "main": "src/main.js",
   "bin": {
