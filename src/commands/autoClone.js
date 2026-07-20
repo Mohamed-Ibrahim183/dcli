@@ -5,6 +5,13 @@ import { readCloneConfig } from '../utils/cloneConfig.js';
 import { resolveEntryUriAsync } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
+function resolveOutputDir(options) {
+  const base = options.output || process.cwd();
+  if (!options.dated) return base;
+  const date = new Date().toISOString().slice(0, 10);
+  return join(base, date);
+}
+
 export async function autoCloneCommand(options) {
   try {
     const config = await readCloneConfig();
@@ -15,10 +22,11 @@ export async function autoCloneCommand(options) {
       process.exit(0);
     }
 
-    const outputDir = options.output || process.cwd();
+    const outputDir = resolveOutputDir(options);
     await mkdir(outputDir, { recursive: true });
 
     highlight(`── Auto Clone: ${databases.length} database(s) ──`);
+    if (options.dated) info(`Output folder: ${outputDir}`);
 
     let cloned = 0;
     let failed = 0;

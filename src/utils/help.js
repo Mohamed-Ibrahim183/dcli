@@ -148,10 +148,33 @@ const COMMANDS = [
     desc: 'Clone all databases in the clone list to JSON files',
     options: [
       ['-o, --output <dir>', 'Output directory (default: current directory)'],
+      ['--dated', 'Save into a YYYY-MM-DD subfolder under the output directory'],
     ],
     examples: [
       '$ dcli auto-clone',
       '$ dcli auto-clone -o ./backups',
+      '$ dcli auto-clone -o ./backups --dated',
+    ],
+  },
+  {
+    name: 'auto-backup',
+    args: '',
+    desc: 'Schedule daily backups of clone-list databases (Windows only; may need admin)',
+    options: [
+      ['--remove', 'Remove the scheduled backup task'],
+      ['--status', 'Show backup schedule and clone-list status'],
+      ['-o, --output <dir>', 'Backup directory (default: ~/.dcli/backups)'],
+      ['--schedule <type>', 'DAILY, HOURLY, ONLOGON, ONCE (default: DAILY)'],
+      ['--at <time>', 'Time for DAILY/ONCE (24h, e.g. 02:00)'],
+      ['--every <n>', 'Hourly interval in hours (default: 1)'],
+      ['--delay <n>', 'ONLOGON delay in minutes (default: 5)'],
+    ],
+    examples: [
+      '$ dcli auto-backup',
+      '$ dcli auto-backup -o ./backups --at 03:00',
+      '$ dcli auto-backup --schedule DAILY --at 02:00',
+      '$ dcli auto-backup --status',
+      '$ dcli auto-backup --remove',
     ],
   },
   {
@@ -308,7 +331,7 @@ export function generateHelp() {
     lines.push('');
   }
 
-  lines.push(`  ${dimmed('Config: ~/.dcli/refresh.json  |  ~/.dcli/auto-clone.json')}`);
+  lines.push(`  ${dimmed('Config: ~/.dcli/refresh.json  |  auto-clone.json  |  auto-backup.json')}`);
   lines.push(`  ${dimmed('Repository: https://github.com/Mohamed-Ibrahim183/dcli')}`);
   lines.push('');
 

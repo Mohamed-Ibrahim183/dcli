@@ -175,7 +175,21 @@ input[type="checkbox"] { accent-color: #58a6ff; }
           <h3>Auto-Clone</h3>
           <div class="form-row">
             <input type="text" id="aclone-output" placeholder="Output directory (default: current)" style="flex:1">
+            <label class="check-label"><input type="checkbox" id="aclone-dated"> Dated folder</label>
             <button class="btn btn-primary" id="aclone-btn">Run Auto-Clone</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Auto-Backup (Daily Schedule)</h3>
+          <p style="color:#8b949e;font-size:13px;margin:0 0 8px">Backs up all databases in the clone list to JSON files each day.</p>
+          <div id="auto-backup-status"></div>
+          <div class="form-row" style="margin-top:8px">
+            <input type="text" id="ab-output" placeholder="Backup directory (default: ~/.dcli/backups)" style="flex:2">
+            <input type="text" id="ab-at" placeholder="Time (e.g. 02:00)" value="02:00" style="flex:1">
+          </div>
+          <div class="status-group">
+            <button class="btn btn-success" id="auto-backup-on">Schedule Daily</button>
+            <button class="btn btn-danger" id="auto-backup-off">Remove</button>
           </div>
         </div>
       </div>
@@ -389,17 +403,54 @@ $('#auto-ping-off').addEventListener('click', async () => {
 // Auto-clone
 $('#aclone-btn').addEventListener('click', async () => {
   const output = $('#aclone-output').value.trim();
+  const dated = $('#aclone-dated').checked;
   $('#aclone-btn').disabled = true; $('#aclone-btn').textContent = 'Cloning...';
   try {
-    const res = await api('POST', '/api/action/auto-clone', { output: output || undefined });
+    const res = await api('POST', '/api/action/auto-clone', { output: output || undefined, dated: dated || undefined });
     (res.results || []).forEach(r => log(r.message, r.ok ? 'success' : 'error'));
     log(`Done: ${res.cloned} cloned, ${res.failed} failed`, 'highlight');
   } catch (e) { log('Auto-clone failed: ' + e.message, 'error'); }
   finally { $('#aclone-btn').disabled = false; $('#aclone-btn').textContent = 'Run Auto-Clone'; }
 });
 
+async function loadAutoBackupStatus() {
+  try {
+    const res = await api('GET', '/api/auto-backup');
+    $('#auto-backup-status').innerHTML = res.scheduled
+      ? `<span class="status-badge status-on">Scheduled</span> ${res.schedule || 'DAILY'} at ${res.at || '02:00'} → ${res.output || ''} (${res.cloneCount || 0} DBs)`
+      : `<span class="status-badge status-off">Not scheduled</span> ${res.cloneCount || 0} database(s) in clone list`;
+    if (res.output && !$('#ab-output').value) $('#ab-output').value = res.output;
+    if (res.at && !$('#ab-at').value) $('#ab-at').value = res.at;
+  } catch (e) { log('Failed to check auto-backup status: ' + e.message, 'error'); }
+}
+
+$('#auto-backup-on').addEventListener('click', async () => {
+  const body = {
+    output: $('#ab-output').value.trim() || undefined,
+    at: $('#ab-at').value.trim() || '02:00',
+    schedule: 'DAILY',
+  };
+  $('#auto-backup-on').disabled = true;
+  try {
+    const res = await api('POST', '/api/auto-backup', body);
+    log(res.message, 'success');
+    loadAutoBackupStatus();
+  } catch (e) { log('Failed to schedule auto-backup: ' + e.message, 'error'); }
+  finally { $('#auto-backup-on').disabled = false; }
+});
+
+$('#auto-backup-off').addEventListener('click', async () => {
+  $('#auto-backup-off').disabled = true;
+  try {
+    const res = await api('DELETE', '/api/auto-backup');
+    log(res.message, 'success');
+    loadAutoBackupStatus();
+  } catch (e) { log('Failed to remove auto-backup: ' + e.message, 'error'); }
+  finally { $('#auto-backup-off').disabled = false; }
+});
+
 // Init
-loadPingList(); loadCloneList(); loadAutoPingStatus();
+loadPingList(); loadCloneList(); loadAutoPingStatus(); loadAutoBackupStatus();
 log('dcli GUI ready', 'success');
 log('Select a tab to get started', 'info');
 </script>

@@ -3,12 +3,15 @@ import { readFileSync, statSync } from 'node:fs';
 import { writeFile, readFile, mkdir, readdir, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, extname, parse, basename } from 'node:path';
+import { dirname, join, extname, parse, basename, resolve as resolvePath } from 'node:path';
 import { execSync } from 'node:child_process';
 import { connect, exportDatabase, importDatabase, dropDatabase, extractDbName, pingDatabase, serializeJson, parseJson } from '../utils/mongodb.js';
 import { readConfig, addDatabase, removeDatabase } from '../utils/config.js';
 import { readCloneConfig, addCloneDatabase, removeCloneDatabase } from '../utils/cloneConfig.js';
 import { resolveName, resolveEntryUriAsync } from '../utils/resolve.js';
+import { readBackupConfig, writeBackupConfig, DEFAULT_BACKUP_DIR } from '../utils/backupConfig.js';
+import { createScheduledTask, removeScheduledTask, queryScheduledTask, scheduleMessage, VALID_SCHEDULES } from '../utils/schedule.js';
+import { TASK_NAME as AUTO_BACKUP_TASK, buildRunCommand } from './autoBackup.js';
 import { info, success, error } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +19,6 @@ const __dirname = dirname(__filename);
 const GUI_DIR = join(__dirname, '..', 'gui');
 const HTML_PATH = join(GUI_DIR, 'index.html');
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
-const VALID_SCHEDULES = new Set(['ONLOGON', 'DAILY', 'HOURLY', 'ONCE']);
 
 function sendJson(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -377,6 +379,55 @@ async function handleApi(req, res) {
       return sendJson(res, { success: true, message: 'Auto-ping task removed.' });
     }
 
+    // Auto-backup
+    if (method === 'GET' && path === '/api/auto-backup') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { scheduled: false, unsupported: true, message: 'auto-backup is Windows-only' });
+      }
+      const config = await readBackupConfig();
+      const task = queryScheduledTask(AUTO_BACKUP_TASK);
+      const cloneConfig = await readCloneConfig();
+      return sendJson(res, {
+        ...task,
+        output: config.output,
+        at: config.at,
+        schedule: config.schedule,
+        every: config.every,
+        delay: config.delay,
+        cloneCount: cloneConfig.databases.length,
+      });
+    }
+    if (method === 'POST' && path === '/api/auto-backup') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { success: false, error: 'auto-backup is only supported on Windows' }, 400);
+      }
+      const schedule = (body.schedule || 'DAILY').toUpperCase();
+      if (!VALID_SCHEDULES.has(schedule)) {
+        return sendJson(res, { success: false, error: 'Invalid schedule. Use: ONLOGON, DAILY, HOURLY, or ONCE.' }, 400);
+      }
+      const saved = await readBackupConfig();
+      const at = body.at || saved.at || '02:00';
+      const every = body.every ?? saved.every;
+      const delay = body.delay ?? saved.delay;
+      const outputDir = resolvePath(body.output || saved.output || DEFAULT_BACKUP_DIR);
+      await mkdir(outputDir, { recursive: true });
+      await writeBackupConfig({ output: outputDir, at, schedule, every, delay });
+      createScheduledTask(AUTO_BACKUP_TASK, schedule, {
+        at,
+        every,
+        delay,
+      }, buildRunCommand(outputDir));
+      const msg = `${scheduleMessage(schedule, { at, every, delay }, '"dcli auto-clone"')} Backups save to ${outputDir}\\YYYY-MM-DD\\`;
+      return sendJson(res, { success: true, message: msg, output: outputDir, at, schedule, every, delay });
+    }
+    if (method === 'DELETE' && path === '/api/auto-backup') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { success: false, error: 'auto-backup is only supported on Windows' }, 400);
+      }
+      removeScheduledTask(AUTO_BACKUP_TASK);
+      return sendJson(res, { success: true, message: 'Auto-backup task removed.' });
+    }
+
     // Action: Auto-clone
     if (method === 'POST' && path === '/api/action/auto-clone') {
       const config = await readCloneConfig();
@@ -384,7 +435,10 @@ async function handleApi(req, res) {
       if (databases.length === 0) {
         return sendJson(res, { success: true, results: [], cloned: 0, failed: 0, message: 'No databases in clone list' });
       }
-      const outputDir = body.output || process.cwd();
+      const baseOutput = body.output || process.cwd();
+      const outputDir = body.dated
+        ? join(baseOutput, new Date().toISOString().slice(0, 10))
+        : baseOutput;
       await mkdir(outputDir, { recursive: true });
       const results = [];
       let cloned = 0;

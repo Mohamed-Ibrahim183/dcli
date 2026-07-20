@@ -9,6 +9,7 @@ import { autoPingCommand } from './commands/autoPing.js';
 import { cloneAddCommand } from './commands/cloneAdd.js';
 import { cloneRemoveCommand } from './commands/cloneRemove.js';
 import { autoCloneCommand } from './commands/autoClone.js';
+import { autoBackupCommand } from './commands/autoBackup.js';
 import { cloneCommand } from './commands/clone.js';
 import { viewCommand } from './commands/view.js';
 import { showCommand } from './commands/show.js';
@@ -110,7 +111,20 @@ program
   .command('auto-clone')
   .description('Clone all databases in the clone list to JSON files')
   .option('-o, --output <dir>', 'Output directory (default: current directory)')
+  .option('--dated', 'Save into a YYYY-MM-DD subfolder under the output directory')
   .action(autoCloneCommand);
+
+program
+  .command('auto-backup')
+  .description('Schedule daily backups of clone-list databases via Windows Task Scheduler')
+  .option('--remove', 'Remove the scheduled backup task')
+  .option('--status', 'Show backup schedule and clone-list status')
+  .option('-o, --output <dir>', 'Backup directory (default: ~/.dcli/backups)')
+  .option('--schedule <type>', 'Schedule type: DAILY, HOURLY, ONLOGON, ONCE (default: DAILY)')
+  .option('--at <time>', 'Time for DAILY/ONCE schedules (24h format, e.g. 02:00)')
+  .option('--every <n>', 'Interval in hours for HOURLY schedule (default: 1)')
+  .option('--delay <n>', 'Delay in minutes for ONLOGON schedule (default: 5)')
+  .action(autoBackupCommand);
 
 program
   .command('view')

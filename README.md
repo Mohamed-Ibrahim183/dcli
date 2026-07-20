@@ -17,6 +17,7 @@
 - **clone-remove** — Remove a database from the auto-clone list
 - **clone** — Clone a single database by friendly name (or URI) to JSON
 - **auto-clone** — Clone all databases in the clone list to JSON files
+- **auto-backup** — Schedule daily backups of clone-list databases via Windows Task Scheduler
 - **gui** — Launch the local web GUI in your browser
 
 ## Installation
@@ -190,7 +191,41 @@ Clone all databases in the clone list to JSON files.
 ```bash
 dcli auto-clone
 dcli auto-clone -o ./backups
+dcli auto-clone -o ./backups --dated    # saves to ./backups/2026-07-20/
 ```
+
+### auto-backup
+
+Schedule automatic backups of every database in the clone list (`~/.dcli/auto-clone.json`). Uses Windows Task Scheduler (`schtasks`). **Windows only.** Creating/removing the task usually requires administrator privileges.
+
+Each run executes `dcli auto-clone --dated`, saving one JSON file per database under `output/YYYY-MM-DD/`.
+
+```bash
+# 1. Add databases to back up
+dcli clone-add "mongodb://..." -n quran-hafez
+
+# 2. Schedule daily backup at 02:00 (default) to ~/.dcli/backups
+dcli auto-backup
+
+# Custom folder and time
+dcli auto-backup -o C:\Users\pc\db-backups --at 03:00
+
+# Check status / remove schedule
+dcli auto-backup --status
+dcli auto-backup --remove
+```
+
+| Option | Description |
+|--------|-------------|
+| `--remove` | Remove the scheduled backup task |
+| `--status` | Show output folder, schedule, and clone-list count |
+| `-o, --output <dir>` | Backup directory (default: `~/.dcli/backups`) |
+| `--schedule <type>` | `DAILY` (default), `HOURLY`, `ONLOGON`, or `ONCE` |
+| `--at <time>` | Time for `DAILY`/`ONCE` schedules (24h, e.g. `02:00`) |
+| `--every <n>` | Interval in hours for `HOURLY` (default: 1) |
+| `--delay <n>` | Delay in minutes for `ONLOGON` (default: 5) |
+
+Settings are saved to `~/.dcli/auto-backup.json`.
 
 ### gui
 
@@ -215,6 +250,16 @@ dcli gui -p 8080
 ```
 
 **Clone list** — `~/.dcli/auto-clone.json` (same format as above).
+
+**Auto-backup settings** — `~/.dcli/auto-backup.json`:
+
+```json
+{
+  "output": "C:\\Users\\pc\\.dcli\\backups",
+  "at": "02:00",
+  "schedule": "DAILY"
+}
+```
 
 Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Friendly names resolve from the ping list first, then the clone list. When a URI has no `/dbname` path segment, dcli discovers the target database on the cluster automatically.
 
