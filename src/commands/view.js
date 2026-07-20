@@ -4,18 +4,9 @@ import { renderTable } from '../utils/table.js';
 import { info, error, highlight } from '../utils/logger.js';
 
 function formatDoc(doc, fields) {
-  const seen = new Set();
   const result = {};
   for (const key of fields) {
-    const val = doc[key];
-    result[key] = formatValue(val);
-    seen.add(key);
-  }
-  for (const key of Object.keys(doc)) {
-    if (!seen.has(key)) {
-      result[key] = formatValue(doc[key]);
-      seen.add(key);
-    }
+    result[key] = formatValue(doc[key]);
   }
   return result;
 }
@@ -36,9 +27,10 @@ function formatValue(val) {
 }
 
 export async function viewCommand(uri, collection, options) {
+  let client;
   try {
     uri = await resolveName(uri);
-    const client = await connect(uri);
+    client = await connect(uri);
     const db = client.db();
     const dbName = extractDbName(uri);
 
@@ -55,7 +47,6 @@ export async function viewCommand(uri, collection, options) {
         console.log(renderTable(rows, { maxColWidth: 60 }));
         info(`${collections.length} collection(s)`);
       }
-      await client.close();
       return;
     }
 
@@ -68,7 +59,6 @@ export async function viewCommand(uri, collection, options) {
     if (limit > 0) cursor.limit(limit);
 
     const docs = await cursor.toArray();
-    await client.close();
 
     if (docs.length === 0) {
       info(`Collection "${collection}" is empty.`);
@@ -96,5 +86,7 @@ export async function viewCommand(uri, collection, options) {
   } catch (err) {
     error(`Failed to view data: ${err.message}`);
     process.exit(1);
+  } finally {
+    if (client) await client.close().catch(() => {});
   }
 }

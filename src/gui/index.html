@@ -279,7 +279,8 @@ $('#exp-btn').addEventListener('click', async () => {
   $('#exp-btn').disabled = true; $('#exp-btn').textContent = 'Exporting...';
   try {
     const res = await api('POST', '/api/action/export', body);
-    log(res.message, 'success');
+    log(res.message, res.dryRun ? 'info' : 'success');
+    if (res.collections) res.collections.forEach(c => log('  ' + c, 'info'));
   } catch (e) { log('Export failed: ' + e.message, 'error'); }
   finally { $('#exp-btn').disabled = false; $('#exp-btn').textContent = 'Export'; }
 });

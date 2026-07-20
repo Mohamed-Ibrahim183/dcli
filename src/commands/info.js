@@ -4,8 +4,9 @@ import { info, error, highlight } from '../utils/logger.js';
 
 export async function infoCommand(uri) {
   uri = await resolveName(uri);
+  let client;
   try {
-    const client = await connect(uri);
+    client = await connect(uri);
     const db = client.db();
     const dbName = extractDbName(uri);
     const collections = await db.listCollections().toArray();
@@ -21,9 +22,10 @@ export async function infoCommand(uri) {
     }
 
     info(`Total documents: ${totalDocs}`);
-    await client.close();
   } catch (err) {
     error(`Failed to get database info: ${err.message}`);
     process.exit(1);
+  } finally {
+    if (client) await client.close().catch(() => {});
   }
 }

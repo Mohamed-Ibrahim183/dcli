@@ -11,7 +11,9 @@ export async function addCommand(uri, options) {
     } else if (result === 'updated') {
       success(`Name updated to "${name}" for ${uri}`);
     } else {
-      warn(result === 'exists' && name ? `Database already exists${name ? ' with a different name' : ''}.` : `Database is already in the ping list.`);
+      warn(name
+        ? `Database already exists in the ping list with name "${name}".`
+        : 'Database is already in the ping list.');
     }
   } catch (err) {
     error(`Failed to add database: ${err.message}`);

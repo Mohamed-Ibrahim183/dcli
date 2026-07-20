@@ -1,7 +1,7 @@
 {
   "name": "@mohamed1_1ibrahim/dcli",
   "version": "1.1.1",
-  "description": "Database CLI - MongoDB data management tool (export, import, ping, info)",
+  "description": "Database CLI - MongoDB data management tool (export, import, ping, clone, view, gui)",
   "main": "src/main.js",
   "bin": {
     "dcli": "bin/index.js"
@@ -17,7 +17,10 @@
     "backup",
     "export",
     "import",
-    "ping"
+    "ping",
+    "clone",
+    "view",
+    "gui"
   ],
   "license": "MIT",
   "repository": {
@@ -34,6 +37,7 @@
     "package.json"
   ],
   "dependencies": {
+    "bson": "^6.10.4",
     "commander": "^12.0.0",
     "mongodb": "^6.8.0"
   }

@@ -144,4 +144,4 @@ for (const cmd of program.commands) {
   cmd.helpInformation = () => colorizeDefaultHelp(orig());
 }
 
-program.parse();
+await program.parseAsync();

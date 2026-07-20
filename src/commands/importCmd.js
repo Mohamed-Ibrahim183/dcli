@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import { join, parse } from 'node:path';
 import { createInterface } from 'node:readline';
 import { stdin as input, stdout as output } from 'node:process';
-import { connect, exportDatabase, dropDatabase, importDatabase, extractDbName } from '../utils/mongodb.js';
+import { connect, exportDatabase, dropDatabase, importDatabase, extractDbName, serializeJson, parseJson } from '../utils/mongodb.js';
 import { resolveName } from '../utils/resolve.js';
 import { info, warn, success, error } from '../utils/logger.js';
 
@@ -23,9 +23,15 @@ function isFullFormat(data) {
 
 async function loadCollectionFile(filePath) {
   const content = await readFile(filePath, 'utf-8');
-  const data = JSON.parse(content);
+  const data = parseJson(content);
   const name = parse(filePath).name;
-  return { name, data: isFullFormat(data) ? data.data : { [name]: Array.isArray(data) ? data : [] } };
+  if (isFullFormat(data)) {
+    return { name, data: data.data };
+  }
+  if (!Array.isArray(data)) {
+    throw new Error(`Collection file must be a JSON array of documents: ${filePath}`);
+  }
+  return { name, data: { [name]: data } };
 }
 
 async function loadDirectory(dirPath) {
@@ -43,6 +49,7 @@ export async function importCommand(uri, options) {
   uri = await resolveName(uri);
   const filePath = options.file;
 
+  let client;
   try {
     const isDir = statSync(filePath).isDirectory();
     let dataToRestore;
@@ -53,13 +60,16 @@ export async function importCommand(uri, options) {
       restoreType = 'directory';
     } else {
       const content = await readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content);
+      const parsed = parseJson(content);
       if (isFullFormat(parsed)) {
         dataToRestore = parsed.data;
         restoreType = 'full';
       } else {
+        if (!Array.isArray(parsed)) {
+          throw new Error('Collection file must be a JSON array of documents, or a full export with database/data fields.');
+        }
         const name = parse(filePath).name;
-        dataToRestore = { [name]: Array.isArray(parsed) ? parsed : [] };
+        dataToRestore = { [name]: parsed };
         restoreType = 'collection';
       }
     }
@@ -79,13 +89,13 @@ export async function importCommand(uri, options) {
       }
 
       info('Creating backup of current database...');
-      const client = await connect(uri);
+      client = await connect(uri);
       const currentData = await exportDatabase(client);
-      await writeFile(backupName, JSON.stringify({
+      await writeFile(backupName, serializeJson({
         database: extractDbName(uri),
         exportedAt: new Date().toISOString(),
         data: currentData,
-      }, null, 2), 'utf-8');
+      }), 'utf-8');
       success(`Backup saved to ${backupName}`);
 
       info('Dropping current database...');
@@ -94,10 +104,9 @@ export async function importCommand(uri, options) {
 
       info('Restoring data...');
       await importDatabase(client, dataToRestore);
-      await client.close();
       success('Database restored successfully.');
     } else {
-      info(`This will restore ${collectionCount} collection(s) from: ${filePath}`);
+      warn(`This will REPLACE ${collectionCount} collection(s) from: ${filePath}`);
       const answer = await askQuestion('Are you sure you want to proceed? (yes/no): ');
 
       if (answer !== 'yes') {
@@ -106,13 +115,14 @@ export async function importCommand(uri, options) {
       }
 
       info('Restoring data...');
-      const client = await connect(uri);
-      await importDatabase(client, dataToRestore);
-      await client.close();
+      client = await connect(uri);
+      await importDatabase(client, dataToRestore, { replace: true });
       success(`${collectionCount} collection(s) restored successfully.`);
     }
   } catch (err) {
     error(`Failed to restore data: ${err.message}`);
     process.exit(1);
+  } finally {
+    if (client) await client.close().catch(() => {});
   }
 }

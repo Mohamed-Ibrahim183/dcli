@@ -3,10 +3,11 @@ import { readCloneConfig } from '../utils/cloneConfig.js';
 import { info, warn, error, highlight } from '../utils/logger.js';
 
 export async function showCommand(options) {
+  const isClone = options.clone;
+  const label = isClone ? 'Clone list' : 'Ping list';
+
   try {
-    const isClone = options.clone;
     const config = isClone ? await readCloneConfig() : await readConfig();
-    const label = isClone ? 'Clone list' : 'Ping list';
     const path = isClone ? '~/.dcli/auto-clone.json' : '~/.dcli/refresh.json';
     const dbs = config.databases || [];
 

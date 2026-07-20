@@ -1,11 +1,11 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { connect, exportDatabase, extractDbName } from '../utils/mongodb.js';
+import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { readCloneConfig } from '../utils/cloneConfig.js';
-import { readConfig } from '../utils/config.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
 export async function cloneCommand(name, options) {
+  let client;
   try {
     const config = await readCloneConfig();
     const entry = config.databases.find(e => (e.name && e.name === name) || e.uri === name);
@@ -16,17 +16,16 @@ export async function cloneCommand(name, options) {
       process.exit(1);
     }
 
-    const uri = typeof entry === 'string' ? entry : entry.uri;
+    const uri = entry.uri;
     const label = entry.name || uri;
 
     const outputDir = options.output || process.cwd();
     await mkdir(outputDir, { recursive: true });
 
     highlight(`Cloning: ${label}`);
-    const client = await connect(uri);
+    client = await connect(uri);
     const dbName = extractDbName(uri);
     const data = await exportDatabase(client);
-    await client.close();
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `clone-${timestamp}-${dbName}.json`;
@@ -36,10 +35,12 @@ export async function cloneCommand(name, options) {
       clonedAt: new Date().toISOString(),
       data,
     };
-    await writeFile(filePath, JSON.stringify(exportData, null, 2), 'utf-8');
+    await writeFile(filePath, serializeJson(exportData), 'utf-8');
     success(`Cloned ${label} → ${fileName} (${Object.keys(data).length} collections)`);
   } catch (err) {
     error(`Clone failed: ${err.message}`);
     process.exit(1);
+  } finally {
+    if (client) await client.close().catch(() => {});
   }
 }

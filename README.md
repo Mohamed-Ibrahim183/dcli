@@ -1,23 +1,23 @@
 # dcli — Database CLI
 
-**dcli** (short for **D**atabase **CLI**) is a command-line tool for MongoDB data management. Designed for terminal use.
+**dcli** (short for **D**atabase **CLI**) is a command-line tool for MongoDB data management. Designed for terminal use. Requires **Node.js 18+**.
 
 ## Features
 
-- **export** — Export a MongoDB database to JSON file(s)
+- **export** — Export a MongoDB database to JSON file(s) (BSON Extended JSON; preserves ObjectId/Date)
 - **import** — Import a database or specific collection(s) from JSON file(s)
 - **ping** — Ping databases to prevent idle/inactivity pause
 - **info** — Show database collections and document counts
 - **add** — Register a database URI in the auto-ping list (with optional name)
 - **remove** — Remove a database by URI or friendly name
-- **auto-ping** — Schedule `dcli ping` to run automatically on Windows logon
+- **auto-ping** — Schedule `dcli ping` via Windows Task Scheduler (ONLOGON, DAILY, HOURLY, ONCE)
 - **view** — Browse collections and documents in a styled table
 - **show** — Display the auto-ping or auto-clone database list
 - **clone-add** — Register a database URI in the auto-clone list
 - **clone-remove** — Remove a database from the auto-clone list
-- **clone** — Clone a single database by friendly name to JSON
+- **clone** — Clone a single database by friendly name (or URI) to JSON
 - **auto-clone** — Clone all databases in the clone list to JSON files
-- **gui** — Launch the web GUI in your browser
+- **gui** — Launch the local web GUI in your browser
 
 ## Installation
 
@@ -32,20 +32,25 @@ npm install
 npm link
 ```
 
+Many commands accept a **friendly name** from your ping or clone list in place of a URI (ping list is checked first).
+
 ## Usage
 
 ### export
 
-Export a MongoDB database to JSON file(s). Output is prettified by default.
+Export a MongoDB database to JSON file(s). Output uses BSON Extended JSON (prettified by default) so types like `ObjectId` and `Date` round-trip on import.
 
 ```bash
 dcli export "mongodb://localhost:27017/mydb"
+dcli export dbName
 ```
+
+Default output name: `data-<timestamp>-<db>.json`.
 
 | Option | Description |
 |--------|-------------|
 | `-o, --output <name>` | Output name (without or with `.json` extension) |
-| `--format <type>` | `file` (single JSON), `split` (per collection), `all` (both) |
+| `--format <type>` | `file` (single JSON), `split` (per collection), `all` (both). Default: `file` |
 | `--compact` | Minify JSON output (default is prettified) |
 | `--include <collections...>` | Only export these collections |
 | `--exclude <collections...>` | Skip these collections |
@@ -64,28 +69,29 @@ dcli export "mongodb://..." --dry-run
 
 ### import
 
-Restore from a full file, single collection file, or directory.
+Restore from a full file, single collection file, or directory. Asks for confirmation before writing.
 
 | `-f` path | Behavior |
 |-----------|----------|
-| Full `.json` file | Restore entire DB (backup + confirmation + drop) |
-| Single collection `.json` | Restore that collection only |
-| Directory of `.json` files | Restore each file as a collection |
+| Full `.json` file | Backup current DB → drop database → restore |
+| Single collection `.json` | Replace that collection (drop + insert) |
+| Directory of `.json` files | Replace each file as a collection |
 
 ```bash
 dcli import "mongodb://localhost:27017/mydb" -f backup.json
 dcli import "mongodb://..." -f ./users.json
 dcli import "mongodb://..." -f ./collections/
+dcli import dbName -f backup.json
 ```
 
 ### ping
 
-Ping databases to prevent inactivity pause.
+Ping databases to prevent inactivity pause. Exits with code `1` if any ping fails.
 
 ```bash
 dcli ping                          # ping all from config
 dcli ping "mongodb://..."          # ping a raw URI
-dcli ping dbName                   # ping by friendly name from config
+dcli ping dbName                   # ping by friendly name (ping list, then clone list)
 dcli ping --file my-dbs.json       # ping all from a custom file
 ```
 
@@ -95,6 +101,7 @@ Show collections and document counts.
 
 ```bash
 dcli info "mongodb://localhost:27017/mydb"
+dcli info dbName
 ```
 
 ### add / remove
@@ -110,7 +117,7 @@ dcli remove dbName                          # remove by friendly name
 
 ### auto-ping
 
-Schedule `dcli ping` to run automatically. Requires administrator privileges.
+Schedule `dcli ping` with Windows Task Scheduler (`schtasks`). **Windows only.** Creating/removing the task usually requires administrator privileges. The scheduled command is `dcli ping`, so `dcli` must be on the system PATH used by Task Scheduler.
 
 ```bash
 dcli auto-ping                       # ONLOGON, 5 min delay (default)
@@ -136,7 +143,7 @@ Browse collections and documents in a styled table.
 ```bash
 dcli view "mongodb://localhost:27017/mydb"              # list collections
 dcli view "mongodb://localhost:27017/mydb" users         # browse documents
-dcli view "mongodb://..." users --limit 5
+dcli view dbName users --limit 5
 dcli view "mongodb://..." users --fields name,email --sort name
 dcli view "mongodb://..." users --all --json
 ```
@@ -144,7 +151,7 @@ dcli view "mongodb://..." users --all --json
 | Option | Description |
 |--------|-------------|
 | `--limit <n>` | Maximum documents (default: 10) |
-| `--fields <fields>` | Comma-separated fields to display |
+| `--fields <fields>` | Comma-separated fields to display (only these columns) |
 | `--sort <field>` | Sort ascending by field |
 | `--all` | Show all documents (no limit) |
 | `--json` | Output raw JSON instead of a table |
@@ -169,7 +176,7 @@ dcli clone-remove dbName
 
 ### clone
 
-Clone a single database from the clone list to a JSON file.
+Clone a single database from the clone list to a JSON file (`clone-<timestamp>-<db>.json`). Accepts a friendly name or URI that exists in the clone list.
 
 ```bash
 dcli clone dbName
@@ -187,7 +194,7 @@ dcli auto-clone -o ./backups
 
 ### gui
 
-Launch the web GUI in your browser (port defaults to 3456).
+Launch the web GUI bound to **localhost** only (default port `3456`).
 
 ```bash
 dcli gui
@@ -209,32 +216,37 @@ dcli gui -p 8080
 
 **Clone list** — `~/.dcli/auto-clone.json` (same format as above).
 
-Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Many commands also accept a **friendly name** in place of a URI (e.g. `dcli ping dbName`).
+Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Friendly names resolve from the ping list first, then the clone list.
 
 ## Export Format
 
-Single file:
+Single file (BSON Extended JSON):
 
 ```json
 {
   "database": "mydb",
   "exportedAt": "2026-05-25T14:30:00.000Z",
   "data": {
-    "users": [ { "_id": "...", "name": "Alice" } ],
-    "posts": [ { "_id": "...", "title": "Hello" } ]
+    "users": [ { "_id": { "$oid": "..." }, "name": "Alice", "createdAt": { "$date": "..." } } ],
+    "posts": [ { "_id": { "$oid": "..." }, "title": "Hello" } ]
   }
 }
 ```
+
+Clone files use the same shape with `clonedAt` instead of `exportedAt` and are import-compatible.
 
 Split (per collection in a folder):
 
 ```
 folder/
-├── users.json     [ { "_id": "...", ... }, ... ]
-├── posts.json     [ { "_id": "...", ... }, ... ]
+├── users.json     [ { "_id": { "$oid": "..." }, ... }, ... ]
+├── posts.json     [ { "_id": { "$oid": "..." }, ... }, ... ]
 ```
+
+Older plain-JSON exports (string `_id` values) still import, but BSON types are only preserved for Extended JSON files.
 
 ## Dependencies
 
 - [commander](https://github.com/tj/commander.js) — CLI framework
 - [mongodb](https://github.com/mongodb/node-mongodb-native) — MongoDB driver
+- [bson](https://github.com/mongodb/js-bson) — Extended JSON serialization

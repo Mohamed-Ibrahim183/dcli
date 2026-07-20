@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { connect, exportDatabase, extractDbName } from '../utils/mongodb.js';
+import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { readCloneConfig } from '../utils/cloneConfig.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
@@ -24,12 +24,12 @@ export async function autoCloneCommand(options) {
 
     for (const entry of databases) {
       const label = entry.name || entry.uri;
+      let client;
       try {
         info(`Cloning: ${label}`);
-        const client = await connect(entry.uri);
+        client = await connect(entry.uri);
         const dbName = extractDbName(entry.uri);
         const data = await exportDatabase(client);
-        await client.close();
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const fileName = `clone-${timestamp}-${dbName}.json`;
@@ -39,16 +39,19 @@ export async function autoCloneCommand(options) {
           clonedAt: new Date().toISOString(),
           data,
         };
-        await writeFile(filePath, JSON.stringify(exportData, null, 2), 'utf-8');
+        await writeFile(filePath, serializeJson(exportData), 'utf-8');
         success(`Cloned ${label} → ${fileName} (${Object.keys(data).length} collections)`);
         cloned++;
       } catch (err) {
         error(`Failed to clone ${label}: ${err.message}`);
         failed++;
+      } finally {
+        if (client) await client.close().catch(() => {});
       }
     }
 
     highlight(`── Done: ${cloned} cloned, ${failed} failed ──`);
+    if (failed > 0) process.exit(1);
   } catch (err) {
     error(`Auto-clone failed: ${err.message}`);
     process.exit(1);

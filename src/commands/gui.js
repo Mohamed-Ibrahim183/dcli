@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
 import { readFileSync, statSync } from 'node:fs';
-import { writeFile, readFile, mkdir, readdir } from 'node:fs/promises';
+import { writeFile, readFile, mkdir, readdir, access } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, extname, parse } from 'node:path';
+import { dirname, join, extname, parse, basename } from 'node:path';
 import { execSync } from 'node:child_process';
-import { connect, exportDatabase, importDatabase, dropDatabase, extractDbName, pingDatabase } from '../utils/mongodb.js';
+import { connect, exportDatabase, importDatabase, dropDatabase, extractDbName, pingDatabase, serializeJson, parseJson } from '../utils/mongodb.js';
 import { readConfig, addDatabase, removeDatabase } from '../utils/config.js';
 import { readCloneConfig, addCloneDatabase, removeCloneDatabase } from '../utils/cloneConfig.js';
 import { info, success, error } from '../utils/logger.js';
@@ -13,6 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const GUI_DIR = join(__dirname, '..', 'gui');
 const HTML_PATH = join(GUI_DIR, 'index.html');
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const VALID_SCHEDULES = new Set(['ONLOGON', 'DAILY', 'HOURLY', 'ONCE']);
 
 function sendJson(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -20,20 +23,61 @@ function sendJson(res, data, status = 200) {
 }
 
 function parseBody(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => body += chunk);
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error('Request body too large'));
+        req.destroy();
+        return;
+      }
+      body += chunk;
+    });
     req.on('end', () => {
-      try { resolve(JSON.parse(body)); }
+      try { resolve(body ? JSON.parse(body) : {}); }
       catch { resolve({}); }
     });
+    req.on('error', reject);
   });
+}
+
+async function exists(filePath) {
+  try {
+    await access(filePath, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getUniquePath(filePath) {
+  if (!(await exists(filePath))) return filePath;
+  const dir = dirname(filePath);
+  const ext = extname(filePath);
+  const base = basename(filePath, ext);
+  let counter = 1;
+  while (true) {
+    const candidate = join(dir, `${base} (${counter})${ext}`);
+    if (!(await exists(candidate))) return candidate;
+    counter++;
+  }
+}
+
+function ensureJsonExt(name) {
+  return extname(name) ? name : `${name}.json`;
 }
 
 async function handleApi(req, res) {
   const method = req.method;
   const path = req.url.split('?')[0];
-  const body = method === 'POST' || method === 'DELETE' ? await parseBody(req) : {};
+  let body = {};
+  try {
+    body = method === 'POST' || method === 'DELETE' ? await parseBody(req) : {};
+  } catch (err) {
+    return sendJson(res, { error: err.message }, 413);
+  }
 
   try {
     // Ping list
@@ -69,98 +113,126 @@ async function handleApi(req, res) {
     // Action: Export
     if (method === 'POST' && path === '/api/action/export') {
       const { uri, output, format, compact, include, exclude, dryRun } = body;
-      const client = await connect(uri);
-      const dbName = extractDbName(uri);
-      const rawData = await exportDatabase(client);
-      await client.close();
+      if (!uri) return sendJson(res, { success: false, error: 'URI is required' }, 400);
 
-      let data = rawData;
-      if (include && include.length > 0) {
-        const set = new Set(include);
-        data = Object.fromEntries(Object.entries(data).filter(([k]) => set.has(k)));
-      }
-      if (exclude && exclude.length > 0) {
-        const set = new Set(exclude);
-        data = Object.fromEntries(Object.entries(data).filter(([k]) => !set.has(k)));
-      }
-
-      if (Object.keys(data).length === 0) {
-        return sendJson(res, { success: true, message: 'No collections matched the filters' });
-      }
-
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const outputName = output || `data-${timestamp}-${dbName}`;
       const fmt = format || 'file';
-      const indent = compact ? 0 : 2;
-      const files = [];
-
-      if (fmt === 'file' || fmt === 'all') {
-        const fileName = `${outputName}.json`;
-        const exportData = { database: dbName, exportedAt: new Date().toISOString(), data };
-        await writeFile(fileName, JSON.stringify(exportData, null, indent), 'utf-8');
-        files.push(fileName);
+      if (!['file', 'split', 'all'].includes(fmt)) {
+        return sendJson(res, { success: false, error: 'Invalid format. Use: file, split, or all.' }, 400);
       }
-      if (fmt === 'split' || fmt === 'all') {
-        const dirName = extname(outputName) ? outputName.replace(/\.[^.]+$/, '') : outputName;
-        await mkdir(dirName, { recursive: true });
-        for (const [name, docs] of Object.entries(data)) {
-          const fp = join(dirName, `${name}.json`);
-          await writeFile(fp, JSON.stringify(docs, null, indent), 'utf-8');
-          files.push(fp);
+
+      const client = await connect(uri);
+      try {
+        const dbName = extractDbName(uri);
+        const rawData = await exportDatabase(client);
+
+        let data = rawData;
+        if (include && include.length > 0) {
+          const set = new Set(include);
+          data = Object.fromEntries(Object.entries(data).filter(([k]) => set.has(k)));
         }
-      }
+        if (exclude && exclude.length > 0) {
+          const set = new Set(exclude);
+          data = Object.fromEntries(Object.entries(data).filter(([k]) => !set.has(k)));
+        }
 
-      return sendJson(res, { success: true, message: `Exported ${Object.keys(data).length} collection(s) to ${files.join(', ')}`, files });
+        if (Object.keys(data).length === 0) {
+          return sendJson(res, { success: true, message: 'No collections matched the filters' });
+        }
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const outputName = output || `data-${timestamp}-${dbName}`;
+
+        if (dryRun) {
+          const preview = Object.entries(data).map(([name, docs]) => `${name}: ${docs.length} document(s)`);
+          return sendJson(res, {
+            success: true,
+            dryRun: true,
+            message: `Dry run: ${Object.keys(data).length} collection(s) would be exported (${fmt})`,
+            database: dbName,
+            output: outputName,
+            collections: preview,
+          });
+        }
+
+        const files = [];
+
+        if (fmt === 'file' || fmt === 'all') {
+          const fileName = await getUniquePath(ensureJsonExt(outputName));
+          const exportData = { database: dbName, exportedAt: new Date().toISOString(), data };
+          await writeFile(fileName, serializeJson(exportData, !!compact), 'utf-8');
+          files.push(fileName);
+        }
+        if (fmt === 'split' || fmt === 'all') {
+          const dirName = extname(outputName) ? outputName.replace(/\.[^.]+$/, '') : outputName;
+          await mkdir(dirName, { recursive: true });
+          for (const [name, docs] of Object.entries(data)) {
+            const fp = await getUniquePath(join(dirName, `${name}.json`));
+            await writeFile(fp, serializeJson(docs, !!compact), 'utf-8');
+            files.push(fp);
+          }
+        }
+
+        return sendJson(res, { success: true, message: `Exported ${Object.keys(data).length} collection(s) to ${files.join(', ')}`, files });
+      } finally {
+        await client.close().catch(() => {});
+      }
     }
 
     // Action: Import
     if (method === 'POST' && path === '/api/action/import') {
       const { uri, file, confirm } = body;
 
+      if (!uri) return sendJson(res, { success: false, error: 'URI is required' }, 400);
       if (!file) return sendJson(res, { success: false, error: 'File path is required' }, 400);
 
       const isDir = statSync(file).isDirectory();
-
-      if (isDir) {
-        const entries = await readdir(file);
-        const jsonFiles = entries.filter(e => e.endsWith('.json')).sort();
-        const dataToRestore = {};
-        for (const f of jsonFiles) {
-          const content = await readFile(join(file, f), 'utf-8');
-          const parsed = JSON.parse(content);
-          const name = parse(f).name;
-          const docs = Array.isArray(parsed) ? parsed : [];
-          dataToRestore[name] = docs;
-        }
-        const client = await connect(uri);
-        await importDatabase(client, dataToRestore);
-        await client.close();
-        return sendJson(res, { success: true, message: `Restored ${Object.keys(dataToRestore).length} collection(s) from ${file}` });
-      }
-
-      const content = await readFile(file, 'utf-8');
-      const parsed = JSON.parse(content);
-      const isFull = parsed && typeof parsed === 'object' && 'database' in parsed && 'data' in parsed;
-
-      if (isFull) {
-        if (!confirm) return sendJson(res, { success: false, confirm: true, message: 'This will delete current data. Check the confirmation box.' });
-
-        const client = await connect(uri);
-        const currentData = await exportDatabase(client);
-        const backupName = `backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-        await writeFile(backupName, JSON.stringify({ database: extractDbName(uri), exportedAt: new Date().toISOString(), data: currentData }, null, 2), 'utf-8');
-        await dropDatabase(client);
-        await importDatabase(client, parsed.data);
-        await client.close();
-        return sendJson(res, { success: true, message: `Database restored from ${file}. Backup saved to ${backupName}` });
-      }
-
-      const name = parse(file).name;
-      const docs = Array.isArray(parsed) ? parsed : [];
       const client = await connect(uri);
-      await importDatabase(client, { [name]: docs });
-      await client.close();
-      return sendJson(res, { success: true, message: `Restored collection "${name}" (${docs.length} documents) from ${file}` });
+      try {
+        if (isDir) {
+          const entries = await readdir(file);
+          const jsonFiles = entries.filter(e => e.endsWith('.json')).sort();
+          const dataToRestore = {};
+          for (const f of jsonFiles) {
+            const content = await readFile(join(file, f), 'utf-8');
+            const parsed = parseJson(content);
+            const name = parse(f).name;
+            if (parsed && typeof parsed === 'object' && 'database' in parsed && 'data' in parsed) {
+              Object.assign(dataToRestore, parsed.data);
+            } else if (Array.isArray(parsed)) {
+              dataToRestore[name] = parsed;
+            } else {
+              return sendJson(res, { success: false, error: `Invalid collection file: ${f}` }, 400);
+            }
+          }
+          await importDatabase(client, dataToRestore, { replace: true });
+          return sendJson(res, { success: true, message: `Restored ${Object.keys(dataToRestore).length} collection(s) from ${file}` });
+        }
+
+        const content = await readFile(file, 'utf-8');
+        const parsed = parseJson(content);
+        const isFull = parsed && typeof parsed === 'object' && 'database' in parsed && 'data' in parsed;
+
+        if (isFull) {
+          if (!confirm) return sendJson(res, { success: false, confirm: true, message: 'This will delete current data. Check the confirmation box.' });
+
+          const currentData = await exportDatabase(client);
+          const backupName = await getUniquePath(`backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+          await writeFile(backupName, serializeJson({ database: extractDbName(uri), exportedAt: new Date().toISOString(), data: currentData }), 'utf-8');
+          await dropDatabase(client);
+          await importDatabase(client, parsed.data);
+          return sendJson(res, { success: true, message: `Database restored from ${file}. Backup saved to ${backupName}` });
+        }
+
+        if (!Array.isArray(parsed)) {
+          return sendJson(res, { success: false, error: 'Collection file must be a JSON array of documents' }, 400);
+        }
+
+        const name = parse(file).name;
+        await importDatabase(client, { [name]: parsed }, { replace: true });
+        return sendJson(res, { success: true, message: `Restored collection "${name}" (${parsed.length} documents) from ${file}` });
+      } finally {
+        await client.close().catch(() => {});
+      }
     }
 
     // Action: Ping
@@ -186,9 +258,12 @@ async function handleApi(req, res) {
         const label = entry.name || extractDbName(entry.uri) || entry.uri;
         try {
           const client = await connect(entry.uri);
-          await pingDatabase(client);
-          await client.close();
-          results.push({ uri: entry.uri, ok: true, message: `Pinged ${label} successfully` });
+          try {
+            await pingDatabase(client);
+            results.push({ uri: entry.uri, ok: true, message: `Pinged ${label} successfully` });
+          } finally {
+            await client.close().catch(() => {});
+          }
         } catch {
           results.push({ uri: entry.uri, ok: false, message: `Failed to ping ${label}` });
         }
@@ -199,23 +274,30 @@ async function handleApi(req, res) {
     // Action: Info
     if (method === 'POST' && path === '/api/action/info') {
       const { uri } = body;
+      if (!uri) return sendJson(res, { success: false, error: 'URI is required' }, 400);
       const client = await connect(uri);
-      const db = client.db();
-      const dbName = extractDbName(uri);
-      const collections = await db.listCollections().toArray();
-      const collInfo = [];
-      let totalDocs = 0;
-      for (const coll of collections) {
-        const count = await db.collection(coll.name).countDocuments();
-        totalDocs += count;
-        collInfo.push({ name: coll.name, count });
+      try {
+        const db = client.db();
+        const dbName = extractDbName(uri);
+        const collections = await db.listCollections().toArray();
+        const collInfo = [];
+        let totalDocs = 0;
+        for (const coll of collections) {
+          const count = await db.collection(coll.name).countDocuments();
+          totalDocs += count;
+          collInfo.push({ name: coll.name, count });
+        }
+        return sendJson(res, { success: true, message: `── ${dbName} ── Collections: ${collections.length}`, dbName, collections: collInfo, totalDocs });
+      } finally {
+        await client.close().catch(() => {});
       }
-      await client.close();
-      return sendJson(res, { success: true, message: `── ${dbName} ── Collections: ${collections.length}`, dbName, collections: collInfo, totalDocs });
     }
 
     // Auto-ping
     if (method === 'GET' && path === '/api/auto-ping') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { scheduled: false, unsupported: true, message: 'auto-ping is Windows-only' });
+      }
       try {
         const out = execSync(`schtasks /query /tn "DCLI-AutoPing" /v /fo csv`, { stdio: 'pipe', encoding: 'utf-8' });
         const lines = out.split('\n').filter(Boolean);
@@ -234,7 +316,13 @@ async function handleApi(req, res) {
       }
     }
     if (method === 'POST' && path === '/api/auto-ping') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { success: false, error: 'auto-ping is only supported on Windows' }, 400);
+      }
       const schedule = (body.schedule || 'ONLOGON').toUpperCase();
+      if (!VALID_SCHEDULES.has(schedule)) {
+        return sendJson(res, { success: false, error: 'Invalid schedule. Use: ONLOGON, DAILY, HOURLY, or ONCE.' }, 400);
+      }
       const at = body.at;
       const every = body.every;
       const delay = body.delay || '5';
@@ -271,11 +359,14 @@ async function handleApi(req, res) {
         DAILY: `Auto-ping task created. It will run "dcli ping" daily at ${at || '09:00'}.`,
         HOURLY: `Auto-ping task created. It will run "dcli ping" every ${every || '1'} hour(s).`,
         ONCE: `Auto-ping task created. It will run "dcli ping" once at ${at || '09:00'}.`,
-        ONLOGON: `Auto-ping task created. It will run "dcli ping" ${delay ? `${delay} minute(s) after` : ''} you log on.`,
+        ONLOGON: `Auto-ping task created. It will run "dcli ping" ${delay} minute(s) after you log on.`,
       };
-      return sendJson(res, { success: true, message: messages[schedule] || messages.ONLOGON });
+      return sendJson(res, { success: true, message: messages[schedule] });
     }
     if (method === 'DELETE' && path === '/api/auto-ping') {
+      if (process.platform !== 'win32') {
+        return sendJson(res, { success: false, error: 'auto-ping is only supported on Windows' }, 400);
+      }
       execSync('schtasks /delete /tn "DCLI-AutoPing" /f', { stdio: 'pipe' });
       return sendJson(res, { success: true, message: 'Auto-ping task removed.' });
     }
@@ -296,15 +387,18 @@ async function handleApi(req, res) {
         const label = entry.name || entry.uri;
         try {
           const client = await connect(entry.uri);
-          const dbName = extractDbName(entry.uri);
-          const data = await exportDatabase(client);
-          await client.close();
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const fileName = `clone-${timestamp}-${dbName}.json`;
-          const filePath = join(outputDir, fileName);
-          await writeFile(filePath, JSON.stringify({ database: dbName, clonedAt: new Date().toISOString(), data }, null, 2), 'utf-8');
-          results.push({ uri: entry.uri, ok: true, message: `Cloned ${label} -> ${fileName} (${Object.keys(data).length} collections)` });
-          cloned++;
+          try {
+            const dbName = extractDbName(entry.uri);
+            const data = await exportDatabase(client);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `clone-${timestamp}-${dbName}.json`;
+            const filePath = await getUniquePath(join(outputDir, fileName));
+            await writeFile(filePath, serializeJson({ database: dbName, clonedAt: new Date().toISOString(), data }), 'utf-8');
+            results.push({ uri: entry.uri, ok: true, message: `Cloned ${label} -> ${basename(filePath)} (${Object.keys(data).length} collections)` });
+            cloned++;
+          } finally {
+            await client.close().catch(() => {});
+          }
         } catch (err) {
           results.push({ uri: entry.uri, ok: false, message: `Failed to clone ${label}: ${err.message}` });
           failed++;
@@ -320,7 +414,7 @@ async function handleApi(req, res) {
 }
 
 export async function guiCommand(options) {
-  const port = options.port || 3456;
+  const port = Number(options.port) || 3456;
 
   try {
     statSync(HTML_PATH);
@@ -339,12 +433,17 @@ export async function guiCommand(options) {
     res.end(html);
   });
 
-  server.listen(port, () => {
-    success(`GUI opened at http://localhost:${port}`);
+  server.on('error', (err) => {
+    error(`Failed to start GUI: ${err.message}`);
+    process.exit(1);
+  });
+
+  server.listen(port, '127.0.0.1', () => {
+    success(`GUI opened at http://127.0.0.1:${port}`);
     try {
-      execSync(`start http://localhost:${port}`, { stdio: 'ignore' });
+      execSync(`start http://127.0.0.1:${port}`, { stdio: 'ignore' });
     } catch {
-      info(`Open http://localhost:${port} in your browser`);
+      info(`Open http://127.0.0.1:${port} in your browser`);
     }
   });
 }

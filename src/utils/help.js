@@ -53,6 +53,7 @@ const COMMANDS = [
     examples: [
       '$ dcli ping',
       '$ dcli ping "mongodb://localhost:27017/mydb"',
+      '$ dcli ping dbName',
       '$ dcli ping --file my-dbs.json',
     ],
   },
@@ -90,7 +91,7 @@ const COMMANDS = [
   {
     name: 'auto-ping',
     args: '',
-    desc: 'Schedule "dcli ping" to run automatically (may need admin)',
+    desc: 'Schedule "dcli ping" to run automatically (Windows only; may need admin)',
     options: [
       ['--remove', 'Remove the scheduled task'],
       ['--schedule <type>', 'ONLOGON, DAILY, HOURLY, ONCE (default: ONLOGON)'],
@@ -102,6 +103,7 @@ const COMMANDS = [
       '$ dcli auto-ping',
       '$ dcli auto-ping --schedule DAILY --at 10:00',
       '$ dcli auto-ping --schedule HOURLY --every 2',
+      '$ dcli auto-ping --schedule ONCE --at 18:00',
       '$ dcli auto-ping --schedule ONLOGON --delay 10',
       '$ dcli auto-ping --remove',
     ],
@@ -130,8 +132,8 @@ const COMMANDS = [
   },
   {
     name: 'clone',
-    args: '<name>',
-    desc: 'Clone a single database by its friendly name from the clone list',
+    args: '<name|uri>',
+    desc: 'Clone a single database by friendly name or URI from the clone list',
     options: [
       ['-o, --output <dir>', 'Output directory (default: current directory)'],
     ],
@@ -177,7 +179,7 @@ const COMMANDS = [
     args: '',
     desc: 'Show the auto-ping or auto-clone database list',
     options: [
-      ['--clone', 'Show the auto-clone list instead of the clone list'],
+      ['--clone', 'Show the auto-clone list instead of the ping list'],
     ],
     examples: [
       '$ dcli show',
@@ -306,7 +308,7 @@ export function generateHelp() {
     lines.push('');
   }
 
-  lines.push(`  ${dimmed('Config file: ~/.dcli/refresh.json')}`);
+  lines.push(`  ${dimmed('Config: ~/.dcli/refresh.json  |  ~/.dcli/auto-clone.json')}`);
   lines.push(`  ${dimmed('Repository: https://github.com/Mohamed-Ibrahim183/dcli')}`);
   lines.push('');
 

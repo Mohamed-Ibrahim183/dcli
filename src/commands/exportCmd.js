@@ -1,7 +1,7 @@
 import { writeFile, mkdir, access } from 'node:fs/promises';
 import { join, extname, dirname, basename } from 'node:path';
 import { constants } from 'node:fs';
-import { connect, exportDatabase, extractDbName } from '../utils/mongodb.js';
+import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { resolveName } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
@@ -35,7 +35,7 @@ async function exists(filePath) {
   }
 }
 
-async function getUniquePath(filePath) {
+export async function getUniquePath(filePath) {
   if (!(await exists(filePath))) return filePath;
 
   const dir = dirname(filePath);
@@ -56,14 +56,19 @@ export async function exportCommand(uri, options) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outputName = options.output || `data-${timestamp}-${dbName}`;
   const format = options.format || 'file';
-  const compact = options.compact ? 0 : 2;
+  const compact = !!options.compact;
   const include = options.include ? (Array.isArray(options.include) ? options.include : [options.include]) : [];
   const exclude = options.exclude ? (Array.isArray(options.exclude) ? options.exclude : [options.exclude]) : [];
 
+  if (!['file', 'split', 'all'].includes(format)) {
+    error(`Invalid format "${format}". Use: file, split, or all.`);
+    process.exit(1);
+  }
+
+  let client;
   try {
-    const client = await connect(uri);
+    client = await connect(uri);
     const rawData = await exportDatabase(client);
-    await client.close();
 
     const data = filterCollections(rawData, include, exclude);
 
@@ -91,7 +96,7 @@ export async function exportCommand(uri, options) {
         exportedAt: new Date().toISOString(),
         data,
       };
-      await writeFile(fileName, JSON.stringify(exportData, null, compact), 'utf-8');
+      await writeFile(fileName, serializeJson(exportData, compact), 'utf-8');
       success(`Exported to ${fileName}`);
     }
 
@@ -100,12 +105,14 @@ export async function exportCommand(uri, options) {
       await mkdir(dirName, { recursive: true });
       for (const [name, docs] of Object.entries(data)) {
         const filePath = await getUniquePath(join(dirName, `${name}.json`));
-        await writeFile(filePath, JSON.stringify(docs, null, compact), 'utf-8');
+        await writeFile(filePath, serializeJson(docs, compact), 'utf-8');
       }
       success(`Exported ${Object.keys(data).length} collection(s) to ${dirName}/`);
     }
   } catch (err) {
     error(`Failed to export database: ${err.message}`);
     process.exit(1);
+  } finally {
+    if (client) await client.close().catch(() => {});
   }
 }

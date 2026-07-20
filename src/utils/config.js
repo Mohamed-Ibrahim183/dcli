@@ -5,8 +5,6 @@ import { join } from 'node:path';
 const CONFIG_DIR = join(homedir(), '.dcli');
 const CONFIG_PATH = join(CONFIG_DIR, 'refresh.json');
 
-const DEFAULT_CONFIG = { databases: [] };
-
 async function ensureConfigDir() {
   await mkdir(CONFIG_DIR, { recursive: true });
 }
@@ -28,7 +26,7 @@ export async function readConfig() {
 }
 
 export async function writeConfig(config) {
-  ensureConfigDir();
+  await ensureConfigDir();
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
 }
 
