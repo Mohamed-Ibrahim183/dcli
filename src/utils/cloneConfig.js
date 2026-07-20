@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { findEntry } from './entryMatch.js';
 
 const CONFIG_DIR = join(homedir(), '.dcli');
 const CONFIG_PATH = join(CONFIG_DIR, 'auto-clone.json');
@@ -46,9 +47,11 @@ export async function addCloneDatabase(uri, name) {
   return 'added';
 }
 
-export async function removeCloneDatabase(uri) {
+export async function removeCloneDatabase(target) {
   const config = await readCloneConfig();
-  const index = config.databases.findIndex(e => e.uri === uri || e.name === uri);
+  const entry = findEntry(config.databases, target);
+  if (!entry) return false;
+  const index = config.databases.indexOf(entry);
   if (index === -1) return false;
   config.databases.splice(index, 1);
   await writeCloneConfig(config);

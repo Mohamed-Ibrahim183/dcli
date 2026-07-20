@@ -2,6 +2,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { readCloneConfig } from '../utils/cloneConfig.js';
+import { findEntry } from '../utils/entryMatch.js';
 import { resolveEntryUriAsync } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
@@ -9,7 +10,7 @@ export async function cloneCommand(name, options) {
   let client;
   try {
     const config = await readCloneConfig();
-    const entry = config.databases.find(e => (e.name && e.name === name) || e.uri === name);
+    const entry = findEntry(config.databases, name);
 
     if (!entry) {
       error(`Database "${name}" not found in clone list.`);

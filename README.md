@@ -113,7 +113,7 @@ Manage the auto-ping list (`~/.dcli/refresh.json`).
 dcli add "mongodb://..." -n dbName          # add with friendly name
 dcli add "mongodb://..." -n dbName          # updates name if URI already exists
 dcli remove "mongodb://user:pass@..."       # remove by URI
-dcli remove dbName                          # remove by friendly name
+dcli remove dbName                          # remove by friendly name or URI path db name
 ```
 
 ### auto-ping
@@ -177,7 +177,7 @@ dcli clone-remove dbName
 
 ### clone
 
-Clone a single database from the clone list to a JSON file (`clone-<timestamp>-<db>.json`). Accepts a friendly name or URI that exists in the clone list.
+Clone a single database from the clone list to a JSON file (`clone-<timestamp>-<db>.json`). Accepts a friendly name, full URI, or database name from the URI path for entries in the clone list.
 
 ```bash
 dcli clone dbName
@@ -229,7 +229,17 @@ Settings are saved to `~/.dcli/auto-backup.json`.
 
 ### gui
 
-Launch the web GUI bound to **localhost** only (default port `3456`).
+Launch the web GUI bound to **localhost** only (default port `3456`). On Windows, it opens automatically in your default browser.
+
+The GUI has three tabs:
+
+| Tab | Features |
+|-----|----------|
+| **Databases** | View ping and clone lists, add/remove entries |
+| **Actions** | Export, import, ping, and info |
+| **Automation** | Schedule auto-ping, run auto-clone, schedule auto-backup |
+
+Automation scheduling (auto-ping, auto-backup) is **Windows only**, same as the CLI commands.
 
 ```bash
 dcli gui
@@ -257,7 +267,9 @@ dcli gui -p 8080
 {
   "output": "C:\\Users\\pc\\.dcli\\backups",
   "at": "02:00",
-  "schedule": "DAILY"
+  "schedule": "DAILY",
+  "every": "1",
+  "delay": "5"
 }
 ```
 

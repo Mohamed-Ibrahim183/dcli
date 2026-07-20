@@ -1,4 +1,4 @@
-import { connect, extractDbName } from '../utils/mongodb.js';
+import { connect, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { resolveName } from '../utils/resolve.js';
 import { renderTable } from '../utils/table.js';
 import { info, error, highlight } from '../utils/logger.js';
@@ -73,7 +73,7 @@ export async function viewCommand(uri, collection, options) {
             return o;
           })
         : docs;
-      console.log(JSON.stringify(output, null, 2));
+      console.log(serializeJson(output));
       return;
     }
 

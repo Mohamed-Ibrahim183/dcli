@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { success, error, info } from '../utils/logger.js';
 import {
   requireWindows,
@@ -32,7 +31,7 @@ export async function autoPingCommand(options) {
   try {
     const schedule = (options.schedule || 'ONLOGON').toUpperCase();
     if (!VALID_SCHEDULES.has(schedule)) {
-      error(`Invalid schedule "${options.schedule}". Use: ONLOGON, DAILY, HOURLY, or ONCE.`);
+      error(`Invalid schedule "${schedule}". Use: ONLOGON, DAILY, HOURLY, or ONCE.`);
       process.exit(1);
     }
 

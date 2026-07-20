@@ -2,6 +2,11 @@ import { execSync } from 'node:child_process';
 
 export const VALID_SCHEDULES = new Set(['ONLOGON', 'DAILY', 'HOURLY', 'ONCE']);
 
+/** Escape double quotes for schtasks /tr and /tn argument values. */
+export function escapeSchtasksQuotes(value) {
+  return value.replace(/"/g, '""');
+}
+
 export function requireWindows(commandName = 'This command') {
   if (process.platform !== 'win32') {
     const err = new Error(`${commandName} uses Windows Task Scheduler (schtasks) and is only supported on Windows.`);
@@ -34,7 +39,7 @@ export function buildSchtasksCreate(taskName, schedule, { at, every, delay }, ru
     }
   }
 
-  parts.push(`/tr "${runCommand}"`);
+  parts.push(`/tr "${escapeSchtasksQuotes(runCommand)}"`);
   return parts.join(' ');
 }
 

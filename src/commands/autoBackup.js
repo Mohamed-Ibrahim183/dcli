@@ -8,18 +8,15 @@ import {
   removeScheduledTask,
   queryScheduledTask,
   scheduleMessage,
+  escapeSchtasksQuotes,
   VALID_SCHEDULES,
 } from '../utils/schedule.js';
 import { success, error, info, warn } from '../utils/logger.js';
 
 const TASK_NAME = 'DCLI-AutoBackup';
 
-function escapeForSchtasks(path) {
-  return path.replace(/"/g, '""');
-}
-
 function buildRunCommand(outputDir) {
-  const out = escapeForSchtasks(outputDir);
+  const out = escapeSchtasksQuotes(outputDir);
   return `cmd /c dcli auto-clone -o "${out}" --dated`;
 }
 
@@ -63,7 +60,7 @@ export async function autoBackupCommand(options) {
     const saved = await readBackupConfig();
     const schedule = (options.schedule || saved.schedule || 'DAILY').toUpperCase();
     if (!VALID_SCHEDULES.has(schedule)) {
-      error(`Invalid schedule "${options.schedule}". Use: ONLOGON, DAILY, HOURLY, or ONCE.`);
+      error(`Invalid schedule "${schedule}". Use: ONLOGON, DAILY, HOURLY, or ONCE.`);
       process.exit(1);
     }
 

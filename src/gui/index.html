@@ -417,8 +417,8 @@ async function loadAutoBackupStatus() {
   try {
     const res = await api('GET', '/api/auto-backup');
     $('#auto-backup-status').innerHTML = res.scheduled
-      ? `<span class="status-badge status-on">Scheduled</span> ${res.schedule || 'DAILY'} at ${res.at || '02:00'} → ${res.output || ''} (${res.cloneCount || 0} DBs)`
-      : `<span class="status-badge status-off">Not scheduled</span> ${res.cloneCount || 0} database(s) in clone list`;
+      ? `<span class="status-badge status-active">Scheduled</span> ${res.schedule || 'DAILY'} at ${res.at || '02:00'} → ${res.output || ''} (${res.cloneCount || 0} DBs)`
+      : `<span class="status-badge status-inactive">Not scheduled</span> ${res.cloneCount || 0} database(s) in clone list`;
     if (res.output && !$('#ab-output').value) $('#ab-output').value = res.output;
     if (res.at && !$('#ab-at').value) $('#ab-at').value = res.at;
   } catch (e) { log('Failed to check auto-backup status: ' + e.message, 'error'); }

@@ -1,6 +1,7 @@
 import { readConfig } from './config.js';
 import { readCloneConfig } from './cloneConfig.js';
 import { connect, listUserDatabases } from './mongodb.js';
+import { findEntry } from './entryMatch.js';
 
 /** True when the URI path already includes a database name. */
 export function uriHasDatabase(uri) {
@@ -119,18 +120,6 @@ async function discoverDatabaseUri(entry, hint) {
   } finally {
     if (client) await client.close().catch(() => {});
   }
-}
-
-function findEntry(databases, input) {
-  return databases.find((e) => {
-    if (e.name === input) return true;
-    try {
-      const db = new URL(e.uri).pathname.replace(/^\//, '');
-      return Boolean(db) && db === input;
-    } catch {
-      return false;
-    }
-  });
 }
 
 /**

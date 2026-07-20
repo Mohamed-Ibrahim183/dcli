@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { findEntry } from './entryMatch.js';
 
 const CONFIG_DIR = join(homedir(), '.dcli');
 const CONFIG_PATH = join(CONFIG_DIR, 'refresh.json');
@@ -46,9 +47,13 @@ export async function addDatabase(uri, name) {
   return 'added';
 }
 
-export async function removeDatabase(uri) {
+export async function removeDatabase(target) {
   const config = await readConfig();
-  const index = config.databases.findIndex(e => e.uri === uri || e.name === uri);
+  const entry = findEntry(config.databases, target);
+  if (!entry) {
+    return false;
+  }
+  const index = config.databases.indexOf(entry);
   if (index === -1) {
     return false;
   }
