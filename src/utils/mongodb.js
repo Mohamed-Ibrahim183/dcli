@@ -79,3 +79,12 @@ export async function pingDatabase(client) {
   const db = client.db();
   await db.command({ ping: 1 });
 }
+
+const SYSTEM_DATABASES = new Set(['admin', 'local', 'config']);
+
+export async function listUserDatabases(client) {
+  const { databases } = await client.db().admin().listDatabases();
+  return databases
+    .filter((d) => !SYSTEM_DATABASES.has(d.name))
+    .map((d) => d.name);
+}

@@ -1,6 +1,6 @@
 import { connect, pingDatabase, extractDbName } from '../utils/mongodb.js';
 import { readConfig, normalizeEntry } from '../utils/config.js';
-import { resolveName } from '../utils/resolve.js';
+import { resolveName, resolveEntryUriAsync } from '../utils/resolve.js';
 import { info, success, warn, error } from '../utils/logger.js';
 
 async function pingUri(uri) {
@@ -21,31 +21,30 @@ function displayName(entry) {
   return entry.name || extractDbName(entry.uri) || entry.uri;
 }
 
+async function withResolvedUri(entry) {
+  return { ...entry, uri: await resolveEntryUriAsync(entry) };
+}
+
 export async function pingCommand(uri, options) {
   let entries;
 
   if (uri) {
-    const config = await readConfig();
-    const named = config.databases.find(e => e.name === uri);
-    if (named) {
-      entries = [named];
-    } else {
-      const resolved = await resolveName(uri);
-      entries = [{ uri: resolved, name: resolved !== uri ? uri : undefined }];
-    }
+    const resolved = await resolveName(uri);
+    const label = /^mongodb(\+srv)?:\/\//i.test(uri) ? undefined : uri;
+    entries = [{ uri: resolved, name: label }];
   } else if (options.file) {
     try {
       const { readFile } = await import('node:fs/promises');
       const content = await readFile(options.file, 'utf-8');
       const parsed = JSON.parse(content);
-      entries = (parsed.databases || []).map(normalizeEntry);
+      entries = await Promise.all((parsed.databases || []).map(normalizeEntry).map(withResolvedUri));
     } catch (err) {
       error(`Failed to read file ${options.file}: ${err.message}`);
       process.exit(1);
     }
   } else {
     const config = await readConfig();
-    entries = config.databases;
+    entries = await Promise.all(config.databases.map(withResolvedUri));
   }
 
   if (entries.length === 0) {

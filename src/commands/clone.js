@@ -2,6 +2,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { readCloneConfig } from '../utils/cloneConfig.js';
+import { resolveEntryUriAsync } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
 export async function cloneCommand(name, options) {
@@ -16,7 +17,7 @@ export async function cloneCommand(name, options) {
       process.exit(1);
     }
 
-    const uri = entry.uri;
+    const uri = await resolveEntryUriAsync(entry, name);
     const label = entry.name || uri;
 
     const outputDir = options.output || process.cwd();

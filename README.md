@@ -32,7 +32,7 @@ npm install
 npm link
 ```
 
-Many commands accept a **friendly name** from your ping or clone list in place of a URI (ping list is checked first).
+Many commands accept a **friendly name** from your ping or clone list in place of a URI (ping list is checked first, then clone list). When the stored URI has no database in the path (common with Atlas), dcli lists databases on the cluster and picks the best match — exact name, close spelling (e.g. `quran-hafez` → `quran-hafaza`), or the only database on the cluster.
 
 ## Usage
 
@@ -216,7 +216,7 @@ dcli gui -p 8080
 
 **Clone list** — `~/.dcli/auto-clone.json` (same format as above).
 
-Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Friendly names resolve from the ping list first, then the clone list.
+Entries can be objects with `uri` and optional `name`, or plain strings (backward compatible). Friendly names resolve from the ping list first, then the clone list. When a URI has no `/dbname` path segment, dcli discovers the target database on the cluster automatically.
 
 ## Export Format
 

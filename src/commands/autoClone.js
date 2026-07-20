@@ -2,6 +2,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect, exportDatabase, extractDbName, serializeJson } from '../utils/mongodb.js';
 import { readCloneConfig } from '../utils/cloneConfig.js';
+import { resolveEntryUriAsync } from '../utils/resolve.js';
 import { success, error, info, highlight } from '../utils/logger.js';
 
 export async function autoCloneCommand(options) {
@@ -27,8 +28,9 @@ export async function autoCloneCommand(options) {
       let client;
       try {
         info(`Cloning: ${label}`);
-        client = await connect(entry.uri);
-        const dbName = extractDbName(entry.uri);
+        const uri = await resolveEntryUriAsync(entry);
+        client = await connect(uri);
+        const dbName = extractDbName(uri);
         const data = await exportDatabase(client);
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

@@ -8,6 +8,7 @@ import { execSync } from 'node:child_process';
 import { connect, exportDatabase, importDatabase, dropDatabase, extractDbName, pingDatabase, serializeJson, parseJson } from '../utils/mongodb.js';
 import { readConfig, addDatabase, removeDatabase } from '../utils/config.js';
 import { readCloneConfig, addCloneDatabase, removeCloneDatabase } from '../utils/cloneConfig.js';
+import { resolveName, resolveEntryUriAsync } from '../utils/resolve.js';
 import { info, success, error } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -120,9 +121,10 @@ async function handleApi(req, res) {
         return sendJson(res, { success: false, error: 'Invalid format. Use: file, split, or all.' }, 400);
       }
 
-      const client = await connect(uri);
+      const resolvedUri = await resolveName(uri);
+      const client = await connect(resolvedUri);
       try {
-        const dbName = extractDbName(uri);
+        const dbName = extractDbName(resolvedUri);
         const rawData = await exportDatabase(client);
 
         let data = rawData;
@@ -186,7 +188,8 @@ async function handleApi(req, res) {
       if (!file) return sendJson(res, { success: false, error: 'File path is required' }, 400);
 
       const isDir = statSync(file).isDirectory();
-      const client = await connect(uri);
+      const resolvedUri = await resolveName(uri);
+      const client = await connect(resolvedUri);
       try {
         if (isDir) {
           const entries = await readdir(file);
@@ -217,7 +220,7 @@ async function handleApi(req, res) {
 
           const currentData = await exportDatabase(client);
           const backupName = await getUniquePath(`backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-          await writeFile(backupName, serializeJson({ database: extractDbName(uri), exportedAt: new Date().toISOString(), data: currentData }), 'utf-8');
+          await writeFile(backupName, serializeJson({ database: extractDbName(resolvedUri), exportedAt: new Date().toISOString(), data: currentData }), 'utf-8');
           await dropDatabase(client);
           await importDatabase(client, parsed.data);
           return sendJson(res, { success: true, message: `Database restored from ${file}. Backup saved to ${backupName}` });
@@ -241,12 +244,14 @@ async function handleApi(req, res) {
       let entries;
 
       if (uri) {
-        const config = await readConfig();
-        const named = config.databases.find(e => e.name === uri);
-        entries = named ? [named] : [{ uri }];
+        const resolved = await resolveName(uri);
+        const label = /^mongodb(\+srv)?:\/\//i.test(uri) ? extractDbName(resolved) : uri;
+        entries = [{ uri: resolved, name: label }];
       } else {
         const config = await readConfig();
-        entries = config.databases;
+        entries = await Promise.all(
+          config.databases.map(async (e) => ({ ...e, uri: await resolveEntryUriAsync(e) }))
+        );
       }
 
       if (entries.length === 0) {
@@ -275,10 +280,11 @@ async function handleApi(req, res) {
     if (method === 'POST' && path === '/api/action/info') {
       const { uri } = body;
       if (!uri) return sendJson(res, { success: false, error: 'URI is required' }, 400);
-      const client = await connect(uri);
+      const resolvedUri = await resolveName(uri);
+      const client = await connect(resolvedUri);
       try {
         const db = client.db();
-        const dbName = extractDbName(uri);
+        const dbName = extractDbName(resolvedUri);
         const collections = await db.listCollections().toArray();
         const collInfo = [];
         let totalDocs = 0;
@@ -386,9 +392,10 @@ async function handleApi(req, res) {
       for (const entry of databases) {
         const label = entry.name || entry.uri;
         try {
-          const client = await connect(entry.uri);
+          const uri = await resolveEntryUriAsync(entry);
+          const client = await connect(uri);
           try {
-            const dbName = extractDbName(entry.uri);
+            const dbName = extractDbName(uri);
             const data = await exportDatabase(client);
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const fileName = `clone-${timestamp}-${dbName}.json`;

@@ -51,8 +51,12 @@ export async function getUniquePath(filePath) {
 }
 
 export async function exportCommand(uri, options) {
+  const input = uri;
   uri = await resolveName(uri);
   const dbName = extractDbName(uri);
+  if (input !== uri && !/^mongodb(\+srv)?:\/\//i.test(input) && input !== dbName) {
+    info(`Resolved "${input}" → database "${dbName}" on cluster.`);
+  }
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outputName = options.output || `data-${timestamp}-${dbName}`;
   const format = options.format || 'file';
@@ -73,7 +77,11 @@ export async function exportCommand(uri, options) {
     const data = filterCollections(rawData, include, exclude);
 
     if (Object.keys(data).length === 0) {
-      info('No collections matched the given filters.');
+      if (include.length || exclude.length) {
+        info(`No collections matched the given filters in database "${dbName}".`);
+      } else {
+        info(`No collections found in database "${dbName}".`);
+      }
       process.exit(0);
     }
 
